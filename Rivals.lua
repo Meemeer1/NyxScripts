@@ -1,10 +1,7 @@
--- language: Lua (Luau), file: rivals_aim_esp.lua
--- target: JJSploit / low-tier executors. No Drawing. No metatable hooks. No gethui.
--- load: paste into JJSploit, run.
+-- language: Lua (Luau), file: rivals_aim_stable.lua
+-- target: JJSploit / low-tier executors. No Drawing. No metatable hooks.
+-- only aimbot + aimlock + esp highlight + distance + sliders + wallcheck
 
--- ============================================================================
--- SERVICES
--- ============================================================================
 local Players          = game:GetService("Players")
 local RunService       = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -35,11 +32,7 @@ local function hasGun()
     return tool:FindFirstChild("Shoot") ~= nil or tool:FindFirstChild("Fire") ~= nil
 end
 
--- ============================================================================
--- CONFIG
--- ============================================================================
 local CFG = {
-    -- aimbot
     Aimbot = false,
     Aimlock = false,
     AimbotFOV = 150,
@@ -51,7 +44,6 @@ local CFG = {
     AimbotMaxDist = 500,
     AimbotFOVRing = true,
     AimbotFOVRingColor = Color3.fromRGB(0, 255, 170),
-    -- esp
     PlayerESP = false,
     TeamColors = true,
     ESPFillColor = Color3.fromRGB(99, 179, 237),
@@ -60,7 +52,6 @@ local CFG = {
     ESPOutlineTransparency = 0,
     ESPMaxDist = 500,
     DistanceESP = false,
-    -- menu
     Open = true,
     MenuKey = Enum.KeyCode.Insert,
 }
@@ -71,7 +62,6 @@ local C = {
     card = Color3.fromRGB(18, 19, 30),
     cardHov = Color3.fromRGB(22, 24, 38),
     accent = Color3.fromRGB(0, 201, 185),
-    accentDk = Color3.fromRGB(0, 140, 128),
     danger = Color3.fromRGB(248, 113, 113),
     text = Color3.fromRGB(225, 230, 245),
     textMid = Color3.fromRGB(150, 155, 175),
@@ -85,14 +75,13 @@ local function teamColor(pl)
     end
     return Color3.fromRGB(230, 70, 70)
 end
-
 local function isTeammate(pl)
     if not lp.Team or not pl.Team then return false end
     return pl.Team == lp.Team
 end
 
 -- ============================================================================
--- GUI
+-- GUI (same pattern as before)
 -- ============================================================================
 local gui = Instance.new("ScreenGui")
 gui.Name = "RIV_Main"
@@ -110,9 +99,9 @@ win.BorderSizePixel = 0
 win.Active = true
 win.Draggable = true
 win.Parent = gui
-local wcr = Instance.new("UICorner"); wcr.CornerRadius = UDim.new(0, 10); wcr.Parent = win
-local wst = Instance.new("UIStroke")
-wst.Color = C.border; wst.Transparency = 0.88; wst.Thickness = 1; wst.Parent = win
+Instance.new("UICorner", win).CornerRadius = UDim.new(0, 10)
+local wst = Instance.new("UIStroke", win)
+wst.Color = C.border; wst.Transparency = 0.88; wst.Thickness = 1
 
 local titleBar = Instance.new("Frame")
 titleBar.Size = UDim2.new(1, 0, 0, 40)
@@ -126,7 +115,7 @@ accentStrip.Position = UDim2.new(0, 14, 0.5, -11)
 accentStrip.BackgroundColor3 = C.accent
 accentStrip.BorderSizePixel = 0
 accentStrip.Parent = titleBar
-local ascr = Instance.new("UICorner"); ascr.CornerRadius = UDim.new(0, 2); ascr.Parent = accentStrip
+Instance.new("UICorner", accentStrip).CornerRadius = UDim.new(0, 2)
 
 local titleLbl = Instance.new("TextLabel")
 titleLbl.BackgroundTransparency = 1
@@ -150,23 +139,19 @@ subLbl.TextXAlignment = Enum.TextXAlignment.Left
 subLbl.Text = "aim + esp  ·  Insert"
 subLbl.Parent = titleBar
 
-local function mkTitleBtn(txt, color, xOff)
-    local b = Instance.new("TextButton")
-    b.Size = UDim2.new(0, 20, 0, 20)
-    b.Position = UDim2.new(1, xOff, 0, 10)
-    b.BackgroundColor3 = color
-    b.BorderSizePixel = 0
-    b.Text = txt
-    b.Font = Enum.Font.GothamBold
-    b.TextSize = 14
-    b.TextColor3 = C.bg
-    b.AutoButtonColor = false
-    b.ZIndex = 5
-    b.Parent = titleBar
-    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(1, 0); c.Parent = b
-    return b
-end
-local btnClose = mkTitleBtn("x", C.danger, -28)
+local btnClose = Instance.new("TextButton")
+btnClose.Size = UDim2.new(0, 20, 0, 20)
+btnClose.Position = UDim2.new(1, -28, 0, 10)
+btnClose.BackgroundColor3 = C.danger
+btnClose.BorderSizePixel = 0
+btnClose.Text = "x"
+btnClose.Font = Enum.Font.GothamBold
+btnClose.TextSize = 14
+btnClose.TextColor3 = C.bg
+btnClose.AutoButtonColor = false
+btnClose.ZIndex = 5
+btnClose.Parent = titleBar
+Instance.new("UICorner", btnClose).CornerRadius = UDim.new(1, 0)
 
 local content = Instance.new("ScrollingFrame")
 content.Size = UDim2.new(1, -20, 1, -60)
@@ -178,23 +163,17 @@ content.AutomaticCanvasSize = Enum.AutomaticSize.Y
 content.ScrollBarThickness = 3
 content.ScrollBarImageColor3 = C.accent
 content.Parent = win
-local cl = Instance.new("UIListLayout")
+local cl = Instance.new("UIListLayout", content)
 cl.Padding = UDim.new(0, 6)
-cl.Parent = content
-local cpad = Instance.new("UIPadding")
+local cpad = Instance.new("UIPadding", content)
 cpad.PaddingTop = UDim.new(0, 8)
 cpad.PaddingBottom = UDim.new(0, 8)
-cpad.Parent = content
 
--- ============================================================================
--- COMPONENTS
--- ============================================================================
 local function secLabel(parent, text)
-    local f = Instance.new("Frame")
+    local f = Instance.new("Frame", parent)
     f.BackgroundTransparency = 1
     f.Size = UDim2.new(1, 0, 0, 22)
-    f.Parent = parent
-    local l = Instance.new("TextLabel")
+    local l = Instance.new("TextLabel", f)
     l.BackgroundTransparency = 1
     l.Size = UDim2.new(1, 0, 1, 0)
     l.Font = Enum.Font.GothamBold
@@ -202,35 +181,30 @@ local function secLabel(parent, text)
     l.TextColor3 = C.accent
     l.TextXAlignment = Enum.TextXAlignment.Left
     l.Text = string.upper(text)
-    l.Parent = f
 end
 
 local function mkCard(parent)
-    local c = Instance.new("Frame")
+    local c = Instance.new("Frame", parent)
     c.BackgroundColor3 = C.card
     c.BorderSizePixel = 0
     c.AutomaticSize = Enum.AutomaticSize.Y
     c.Size = UDim2.new(1, 0, 0, 0)
-    c.Parent = parent
-    local cr = Instance.new("UICorner"); cr.CornerRadius = UDim.new(0, 7); cr.Parent = c
-    local st = Instance.new("UIStroke")
-    st.Color = C.border; st.Transparency = 0.92; st.Thickness = 1; st.Parent = c
-    local lay = Instance.new("UIListLayout")
+    Instance.new("UICorner", c).CornerRadius = UDim.new(0, 7)
+    local st = Instance.new("UIStroke", c)
+    st.Color = C.border; st.Transparency = 0.92; st.Thickness = 1
+    local lay = Instance.new("UIListLayout", c)
     lay.Padding = UDim.new(0, 4)
-    lay.Parent = c
-    local pd = Instance.new("UIPadding")
+    local pd = Instance.new("UIPadding", c)
     pd.PaddingLeft = UDim.new(0, 10); pd.PaddingRight = UDim.new(0, 10)
     pd.PaddingTop = UDim.new(0, 8); pd.PaddingBottom = UDim.new(0, 8)
-    pd.Parent = c
     return c
 end
 
 local function mkToggle(parent, label, cfgKey)
-    local row = Instance.new("Frame")
+    local row = Instance.new("Frame", parent)
     row.BackgroundTransparency = 1
     row.Size = UDim2.new(1, 0, 0, 30)
-    row.Parent = parent
-    local lbl = Instance.new("TextLabel")
+    local lbl = Instance.new("TextLabel", row)
     lbl.BackgroundTransparency = 1
     lbl.Size = UDim2.new(1, -50, 1, 0)
     lbl.Font = Enum.Font.Gotham
@@ -238,8 +212,7 @@ local function mkToggle(parent, label, cfgKey)
     lbl.TextColor3 = C.textMid
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.Text = label
-    lbl.Parent = row
-    local pill = Instance.new("TextButton")
+    local pill = Instance.new("TextButton", row)
     pill.Size = UDim2.new(0, 42, 0, 22)
     pill.Position = UDim2.new(1, -42, 0.5, -11)
     pill.BackgroundColor3 = CFG[cfgKey] and C.accent or C.card
@@ -247,16 +220,14 @@ local function mkToggle(parent, label, cfgKey)
     pill.Text = ""
     pill.AutoButtonColor = false
     pill.ZIndex = 2
-    pill.Parent = row
-    local pcr = Instance.new("UICorner"); pcr.CornerRadius = UDim.new(1, 0); pcr.Parent = pill
-    local knob = Instance.new("Frame")
+    Instance.new("UICorner", pill).CornerRadius = UDim.new(1, 0)
+    local knob = Instance.new("Frame", pill)
     knob.Size = UDim2.new(0, 16, 0, 16)
     knob.Position = CFG[cfgKey] and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
     knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     knob.BorderSizePixel = 0
     knob.ZIndex = 3
-    knob.Parent = pill
-    local kcr = Instance.new("UICorner"); kcr.CornerRadius = UDim.new(1, 0); kcr.Parent = knob
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
     local state = CFG[cfgKey] and true or false
     local function render()
         pill.BackgroundColor3 = state and C.accent or C.card
@@ -271,11 +242,10 @@ local function mkToggle(parent, label, cfgKey)
 end
 
 local function mkSlider(parent, label, cfgKey, min, max, step)
-    local outer = Instance.new("Frame")
+    local outer = Instance.new("Frame", parent)
     outer.BackgroundTransparency = 1
     outer.Size = UDim2.new(1, 0, 0, 44)
-    outer.Parent = parent
-    local lbl = Instance.new("TextLabel")
+    local lbl = Instance.new("TextLabel", outer)
     lbl.BackgroundTransparency = 1
     lbl.Size = UDim2.new(1, -60, 0, 18)
     lbl.Font = Enum.Font.Gotham
@@ -283,8 +253,7 @@ local function mkSlider(parent, label, cfgKey, min, max, step)
     lbl.TextColor3 = C.textMid
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.Text = label
-    lbl.Parent = outer
-    local val = Instance.new("TextLabel")
+    local val = Instance.new("TextLabel", outer)
     val.BackgroundTransparency = 1
     val.Position = UDim2.new(1, -60, 0, 0)
     val.Size = UDim2.new(0, 60, 0, 18)
@@ -292,29 +261,25 @@ local function mkSlider(parent, label, cfgKey, min, max, step)
     val.TextSize = 12
     val.TextColor3 = C.accent
     val.TextXAlignment = Enum.TextXAlignment.Right
-    val.Parent = outer
-    local track = Instance.new("Frame")
+    local track = Instance.new("Frame", outer)
     track.Size = UDim2.new(1, 0, 0, 5)
     track.Position = UDim2.new(0, 0, 0, 26)
     track.BackgroundColor3 = C.card
     track.BorderSizePixel = 0
-    track.Parent = outer
-    local tcr = Instance.new("UICorner"); tcr.CornerRadius = UDim.new(1, 0); tcr.Parent = track
-    local fill = Instance.new("Frame")
+    Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+    local fill = Instance.new("Frame", track)
     fill.Size = UDim2.new(0, 0, 1, 0)
     fill.BackgroundColor3 = C.accent
     fill.BorderSizePixel = 0
-    fill.Parent = track
-    local fcr = Instance.new("UICorner"); fcr.CornerRadius = UDim.new(1, 0); fcr.Parent = fill
-    local knob = Instance.new("Frame")
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+    local knob = Instance.new("Frame", track)
     knob.Size = UDim2.new(0, 12, 0, 12)
     knob.AnchorPoint = Vector2.new(0.5, 0.5)
     knob.Position = UDim2.new(0, 0, 0.5, 0)
     knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     knob.BorderSizePixel = 0
     knob.ZIndex = 2
-    knob.Parent = track
-    local kcr = Instance.new("UICorner"); kcr.CornerRadius = UDim.new(1, 0); kcr.Parent = knob
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
     local function fmt(v)
         if step < 0.1 then return string.format("%.2f", v) end
         if step < 1 then return string.format("%.1f", v) end
@@ -322,8 +287,7 @@ local function mkSlider(parent, label, cfgKey, min, max, step)
     end
     local dragging = false
     local function render(v)
-        local rel = (max > min) and ((v - min) / (max - min)) or 0
-        rel = math.clamp(rel, 0, 1)
+        local rel = math.clamp((v - min) / math.max(max - min, 0.0001), 0, 1)
         fill.Size = UDim2.new(rel, 0, 1, 0)
         knob.Position = UDim2.new(rel, 0, 0.5, 0)
         val.Text = fmt(v)
@@ -337,13 +301,12 @@ local function mkSlider(parent, label, cfgKey, min, max, step)
         CFG[cfgKey] = snapped
         render(snapped)
     end
-    local hit = Instance.new("TextButton")
+    local hit = Instance.new("TextButton", outer)
     hit.Size = UDim2.new(1, 0, 0, 22)
     hit.Position = UDim2.new(0, 0, 0, 22)
     hit.BackgroundTransparency = 1
     hit.Text = ""
     hit.ZIndex = 5
-    hit.Parent = outer
     hit.InputBegan:Connect(function(inp)
         if inp.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
@@ -361,11 +324,10 @@ local function mkSlider(parent, label, cfgKey, min, max, step)
 end
 
 local function mkDrop(parent, label, options, cfgKey)
-    local row = Instance.new("Frame")
+    local row = Instance.new("Frame", parent)
     row.BackgroundTransparency = 1
     row.Size = UDim2.new(1, 0, 0, 30)
-    row.Parent = parent
-    local lbl = Instance.new("TextLabel")
+    local lbl = Instance.new("TextLabel", row)
     lbl.BackgroundTransparency = 1
     lbl.Size = UDim2.new(0.5, 0, 1, 0)
     lbl.Font = Enum.Font.Gotham
@@ -373,10 +335,9 @@ local function mkDrop(parent, label, options, cfgKey)
     lbl.TextColor3 = C.textMid
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.Text = label
-    lbl.Parent = row
     local current = CFG[cfgKey] or options[1]
     CFG[cfgKey] = current
-    local btn = Instance.new("TextButton")
+    local btn = Instance.new("TextButton", row)
     btn.Size = UDim2.new(0.48, 0, 0, 24)
     btn.Position = UDim2.new(0.52, 0, 0.5, -12)
     btn.BackgroundColor3 = C.card
@@ -387,11 +348,10 @@ local function mkDrop(parent, label, options, cfgKey)
     btn.Text = "v  " .. tostring(current)
     btn.AutoButtonColor = false
     btn.ZIndex = 3
-    btn.Parent = row
-    local bcr = Instance.new("UICorner"); bcr.CornerRadius = UDim.new(0, 5); bcr.Parent = btn
-    local bst = Instance.new("UIStroke")
-    bst.Color = C.border; bst.Transparency = 0.92; bst.Thickness = 1; bst.Parent = btn
-    local list = Instance.new("Frame")
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
+    local bst = Instance.new("UIStroke", btn)
+    bst.Color = C.border; bst.Transparency = 0.92; bst.Thickness = 1
+    local list = Instance.new("Frame", row)
     list.Size = UDim2.new(0, 150, 0, 0)
     list.Position = UDim2.new(1, -150, 0, 30)
     list.BackgroundColor3 = C.surface
@@ -399,14 +359,13 @@ local function mkDrop(parent, label, options, cfgKey)
     list.Visible = false
     list.ZIndex = 50
     list.ClipsDescendants = true
-    list.Parent = row
-    local lcr = Instance.new("UICorner"); lcr.CornerRadius = UDim.new(0, 5); lcr.Parent = list
-    local lst = Instance.new("UIStroke")
-    lst.Color = C.accent; lst.Transparency = 0.5; lst.Thickness = 1; lst.Parent = list
-    local ll = Instance.new("UIListLayout"); ll.Parent = list
+    Instance.new("UICorner", list).CornerRadius = UDim.new(0, 5)
+    local lst = Instance.new("UIStroke", list)
+    lst.Color = C.accent; lst.Transparency = 0.5; lst.Thickness = 1
+    Instance.new("UIListLayout", list)
     local open = false
     for _, opt in ipairs(options) do
-        local o = Instance.new("TextButton")
+        local o = Instance.new("TextButton", list)
         o.Size = UDim2.new(1, 0, 0, 24)
         o.BackgroundColor3 = C.surface
         o.BorderSizePixel = 0
@@ -416,7 +375,6 @@ local function mkDrop(parent, label, options, cfgKey)
         o.Text = tostring(opt)
         o.AutoButtonColor = false
         o.ZIndex = 51
-        o.Parent = list
         o.MouseEnter:Connect(function() o.BackgroundColor3 = C.cardHov end)
         o.MouseLeave:Connect(function() o.BackgroundColor3 = C.surface end)
         o.MouseButton1Click:Connect(function()
@@ -434,13 +392,10 @@ local function mkDrop(parent, label, options, cfgKey)
     end)
 end
 
--- ============================================================================
--- BUILD MENU
--- ============================================================================
 secLabel(content, "Aimbot")
 local c1 = mkCard(content)
 mkToggle(c1, "Aimbot (hold RMB)", "Aimbot")
-mkToggle(c1, "Aimlock (instant snap)", "Aimlock")
+mkToggle(c1, "Aimlock (hold RMB, snap)", "Aimlock")
 mkToggle(c1, "Team Check", "AimbotTeamCheck")
 mkToggle(c1, "Require Gun", "AimbotRequireGun")
 mkToggle(c1, "Wall Check", "AimbotWallCheck")
@@ -459,18 +414,17 @@ mkSlider(c2, "ESP Max Distance", "ESPMaxDist", 100, 2000, 25)
 mkSlider(c2, "Fill Transparency", "ESPFillTransparency", 0, 1, 0.05)
 
 -- ============================================================================
--- AIMBOT
+-- TARGET SELECTION
 -- ============================================================================
 local function getBestTarget()
     local vp = cam.ViewportSize
     local cx, cy = vp.X / 2, vp.Y / 2
-    local candidates = {}
+    local bestPart, bestScore = nil, math.huge
     for _, pl in ipairs(Players:GetPlayers()) do
         if pl ~= lp and isAlive(pl) then
             local skip = false
             if CFG.AimbotTeamCheck and isTeammate(pl) then skip = true end
             if dist(pl) > CFG.AimbotMaxDist then skip = true end
-            if CFG.AimbotRequireGun and not hasGun() then skip = true end
             if not skip then
                 local ch = chr(pl)
                 local pt = ch and (ch:FindFirstChild(CFG.AimbotPart) or root(pl))
@@ -487,11 +441,12 @@ local function getBestTarget()
                         end
                     end
                     if not blocked then
-                        local sp, vis = cam:WorldToViewportPoint(pt.Position)
-                        if vis and sp.Z > 0 then
+                        local sp, onScreen = cam:WorldToViewportPoint(pt.Position)
+                        if onScreen and sp.Z > 0 then
                             local sd = math.sqrt((sp.X - cx)^2 + (sp.Y - cy)^2)
-                            if sd <= CFG.AimbotFOV then
-                                table.insert(candidates, {part = pt, sd = sd})
+                            if sd <= CFG.AimbotFOV and sd < bestScore then
+                                bestScore = sd
+                                bestPart = pt
                             end
                         end
                     end
@@ -499,27 +454,85 @@ local function getBestTarget()
             end
         end
     end
-    if #candidates == 0 then return nil end
-    table.sort(candidates, function(a, b) return a.sd < b.sd end)
-    return candidates[1].part
+    return bestPart
 end
 
--- FOV ring via Frame + UIStroke (no Drawing needed)
-local fovCircle = Instance.new("Frame")
+-- FOV ring — Frame + UIStroke (no Drawing)
+local fovCircle = Instance.new("Frame", gui)
 fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 fovCircle.BackgroundTransparency = 1
 fovCircle.BorderSizePixel = 0
 fovCircle.Visible = false
 fovCircle.ZIndex = 500
-fovCircle.Parent = gui
-local fovStroke = Instance.new("UIStroke")
+local fovStroke = Instance.new("UIStroke", fovCircle)
 fovStroke.Thickness = 1.5
 fovStroke.Color = CFG.AimbotFOVRingColor
 fovStroke.Transparency = 0.25
-fovStroke.Parent = fovCircle
-local fovCorner = Instance.new("UICorner")
-fovCorner.CornerRadius = UDim.new(1, 0)
-fovCorner.Parent = fovCircle
+Instance.new("UICorner", fovCircle).CornerRadius = UDim.new(1, 0)
+
+-- ============================================================================
+-- AIM LOOP — stable
+-- ============================================================================
+local cameraSaved = false
+local graceUntil = 0     -- hold Scriptable for a short window after losing target
+
+local function restoreCamera()
+    if cameraSaved then
+        cam.CameraType = Enum.CameraType.Custom
+        cameraSaved = false
+    end
+end
+
+RunService.RenderStepped:Connect(function(dt)
+    -- FOV ring
+    local ringOn = CFG.AimbotFOVRing and (CFG.Aimbot or CFG.Aimlock)
+    fovCircle.Visible = ringOn
+    if ringOn then
+        local vp = cam.ViewportSize
+        fovCircle.Position = UDim2.fromOffset(vp.X / 2, vp.Y / 2)
+        fovCircle.Size = UDim2.fromOffset(CFG.AimbotFOV * 2, CFG.AimbotFOV * 2)
+        fovStroke.Color = CFG.AimbotFOVRingColor
+    end
+
+    local holding = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+    local wantAim = (CFG.Aimbot or CFG.Aimlock) and holding
+        and (not CFG.AimbotRequireGun or hasGun())
+
+    if wantAim then
+        local t = getBestTarget()
+        if t then
+            -- first frame of aiming: save camera
+            if not cameraSaved then
+                cam.CameraType = Enum.CameraType.Scriptable
+                cameraSaved = true
+            end
+            graceUntil = tick() + 0.15
+
+            -- use current camera position, look at target
+            local camPos = cam.CFrame.Position
+            local goal = CFrame.lookAt(camPos, t.Position)
+
+            if CFG.Aimlock or CFG.AimbotSmooth <= 0.001 then
+                cam.CFrame = goal
+            else
+                -- frame-rate independent lerp
+                local s = math.clamp(CFG.AimbotSmooth, 0.01, 0.99)
+                local alpha = 1 - math.pow(1 - s, dt * 60)
+                cam.CFrame = cam.CFrame:Lerp(goal, alpha)
+            end
+        else
+            -- target lost: keep camera Scriptable for grace window, don't write CFrame
+            if cameraSaved and tick() > graceUntil then
+                restoreCamera()
+            end
+        end
+    else
+        -- not aiming
+        if cameraSaved then
+            restoreCamera()
+        end
+    end
+end)
 
 -- ============================================================================
 -- ESP — Highlight + BillboardGui
@@ -563,7 +576,7 @@ local function buildTag(pl)
     bb.AlwaysOnTop = true
     bb.Adornee = hrp
     bb.Parent = tagFolder
-    local distLbl = Instance.new("TextLabel")
+    local distLbl = Instance.new("TextLabel", bb)
     distLbl.Name = "distLbl"
     distLbl.BackgroundTransparency = 1
     distLbl.Size = UDim2.new(1, 0, 1, 0)
@@ -572,7 +585,6 @@ local function buildTag(pl)
     distLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
     distLbl.TextStrokeTransparency = 0.5
     distLbl.Text = ""
-    distLbl.Parent = bb
 end
 
 local function updateHighlight(pl)
@@ -584,8 +596,8 @@ local function updateHighlight(pl)
         espHighlights[pl] = nil
         return
     end
-    local show = CFG.PlayerESP
-    hl.Enabled = show and dist(pl) <= CFG.ESPMaxDist
+    local show = CFG.PlayerESP and dist(pl) <= CFG.ESPMaxDist
+    hl.Enabled = show
     if not show then return end
     local col = CFG.TeamColors and teamColor(pl) or CFG.ESPFillColor
     hl.FillColor = col
@@ -648,9 +660,6 @@ lp.CharacterAdded:Connect(function()
     end
 end)
 
--- ============================================================================
--- UPDATE LOOPS
--- ============================================================================
 local timers = {esp = 0, tags = 0}
 RunService.RenderStepped:Connect(function(dt)
     timers.esp = timers.esp + dt
@@ -666,44 +675,6 @@ RunService.RenderStepped:Connect(function(dt)
         for _, pl in ipairs(Players:GetPlayers()) do
             if pl ~= lp then updateTag(pl) end
         end
-    end
-end)
-
--- ============================================================================
--- AIM LOOP — camera Scriptable while aiming
--- ============================================================================
-local _cameraSaved = false
-RunService.RenderStepped:Connect(function()
-    fovCircle.Visible = CFG.AimbotFOVRing and (CFG.Aimbot or CFG.Aimlock)
-    if fovCircle.Visible then
-        local vp = cam.ViewportSize
-        fovCircle.Position = UDim2.fromOffset(vp.X / 2, vp.Y / 2)
-        fovCircle.Size = UDim2.fromOffset(CFG.AimbotFOV * 2, CFG.AimbotFOV * 2)
-        fovStroke.Color = CFG.AimbotFOVRingColor
-    end
-
-    local holding = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
-    local active = (CFG.Aimbot or CFG.Aimlock) and holding
-        and (not CFG.AimbotRequireGun or hasGun())
-
-    if active then
-        if not _cameraSaved then
-            cam.CameraType = Enum.CameraType.Scriptable
-            _cameraSaved = true
-        end
-        local t = getBestTarget()
-        if t then
-            local goalCF = CFrame.new(cam.CFrame.Position, t.Position)
-            if CFG.Aimlock or CFG.AimbotSmooth <= 0 then
-                cam.CFrame = goalCF
-            else
-                local alpha = math.clamp(1 - CFG.AimbotSmooth * 2, 0.05, 1)
-                cam.CFrame = cam.CFrame:Lerp(goalCF, alpha)
-            end
-        end
-    elseif _cameraSaved then
-        cam.CameraType = Enum.CameraType.Custom
-        _cameraSaved = false
     end
 end)
 
