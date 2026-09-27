@@ -1,5 +1,5 @@
--- language: Lua, file: trench_decay_v8.lua, target: Roblox Trench Decay, universal executor
--- *no key. INSERT opens/closes menu. players + NPCs. real weapon list.*
+-- language: Lua, file: trench_decay_v9.lua, target: Roblox Trench Decay, universal executor
+-- *Insert OR RightShift OR F1 toggles. floating button fallback. debug line in menu.*
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -11,55 +11,26 @@ local LocalPlayer = Players.LocalPlayer
 
 local HAS_DRAWING = pcall(function() return Drawing.new("Line") end)
 
--- ═══════════════════════════════════════════
--- CONFIG
--- ═══════════════════════════════════════════
 local Config = {
     ESP = {
-        Enabled = false,
-        Players = true,
-        NPCs = true,
-        Highlight = false,
-        WallHack = false,
-        Name = false,
-        Health = false,
-        Distance = false,
-        Box = false,
-        Tracer = false,
-        Chams = false,
-        TeamColors = true,
-        MaxDist = 250,
-        MinDist = 250,
+        Enabled = false, Players = true, NPCs = true,
+        Highlight = false, WallHack = false, Name = false, Health = false,
+        Distance = false, Box = false, Tracer = false, Chams = false,
+        TeamColors = true, MaxDist = 250, MinDist = 250,
         ColorSelf = Color3.fromRGB(80, 220, 120),
         ColorEnemy = Color3.fromRGB(230, 70, 70),
         ColorNeutral = Color3.fromRGB(200, 200, 210),
     },
-    WeaponESP = {
-        Enabled = false,
-        MinDist = 250,
-        MaxDist = 250,
-    },
+    WeaponESP = { Enabled = false, MinDist = 250, MaxDist = 250 },
     Aim = {
-        Enabled = false,
-        AimLock = false,
-        Triggerbot = false,
-        TriggerDelay = 0.01,
-        RequireGun = false,
-        WallCheck = false,
-        TeamCheck = false,
-        FOV = 150,
-        Smooth = 0.02,
-        Part = "Head",
+        Enabled = false, AimLock = false, Triggerbot = false, TriggerDelay = 0.01,
+        RequireGun = false, WallCheck = false, TeamCheck = false,
+        FOV = 150, Smooth = 0.02, Part = "Head",
         Key = Enum.UserInputType.MouseButton2,
-        FOVRing = false,
-        FOVRingColor = Color3.fromRGB(120, 190, 255),
+        FOVRing = false, FOVRingColor = Color3.fromRGB(120, 190, 255),
         IncludeNPCs = true,
     },
-    Misc = {
-        Fullbright = false,
-        NoRecoil = false,
-        NoSpread = false,
-    },
+    Misc = { Fullbright = false, NoRecoil = false, NoSpread = false },
 }
 
 local WEAPON_NAMES = {
@@ -84,9 +55,7 @@ local function isWeaponModel(obj)
     if not obj or not obj:IsA("Model") then return false end
     local nm = obj.Name:lower()
     for _, wn in ipairs(WEAPON_NAMES) do
-        if nm == wn:lower() or nm:find(wn:lower(), 1, true) then
-            return true
-        end
+        if nm == wn:lower() or nm:find(wn:lower(), 1, true) then return true end
     end
     return false
 end
@@ -124,8 +93,7 @@ local function isHostileNPC(model)
     if model == LocalPlayer.Character then return false end
     local hum = model:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then return false end
-    local plr = Players:GetPlayerFromCharacter(model)
-    if plr then return false end
+    if Players:GetPlayerFromCharacter(model) then return false end
     return true
 end
 
@@ -154,12 +122,11 @@ local function getPlayerAimPart(character)
 end
 
 -- ═══════════════════════════════════════════
--- GLASS UI HELPERS
+-- GLASS UI
 -- ═══════════════════════════════════════════
 local function glass(parent, size, pos, radius)
     local f = Instance.new("Frame")
-    f.Size = size
-    f.Position = pos
+    f.Size = size f.Position = pos
     f.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
     f.BackgroundTransparency = 0.45
     f.BorderSizePixel = 0
@@ -167,9 +134,7 @@ local function glass(parent, size, pos, radius)
     local c = Instance.new("UICorner") c.CornerRadius = UDim.new(0, radius or 14) c.Parent = f
     local stroke = Instance.new("UIStroke")
     stroke.Color = Color3.fromRGB(140, 190, 255)
-    stroke.Transparency = 0.7
-    stroke.Thickness = 1
-    stroke.Parent = f
+    stroke.Transparency = 0.7 stroke.Thickness = 1 stroke.Parent = f
     local grad = Instance.new("UIGradient")
     grad.Color = ColorSequence.new{
         ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
@@ -181,15 +146,6 @@ local function glass(parent, size, pos, radius)
         NumberSequenceKeypoint.new(1, 0.85)
     }
     grad.Parent = f
-    local glow = Instance.new("Frame")
-    glow.Size = UDim2.new(1, -4, 1, -4)
-    glow.Position = UDim2.fromOffset(2, 2)
-    glow.BackgroundColor3 = Color3.fromRGB(120, 180, 255)
-    glow.BackgroundTransparency = 0.92
-    glow.BorderSizePixel = 0
-    glow.ZIndex = 0
-    glow.Parent = f
-    local gc = Instance.new("UICorner") gc.CornerRadius = UDim.new(0, radius or 14) gc.Parent = glow
     return f
 end
 
@@ -203,7 +159,6 @@ local function makeToggle(parent, text, default, cb, order)
     pill.Size = UDim2.fromOffset(34, 18)
     pill.Position = UDim2.fromOffset(0, 8)
     pill.BackgroundColor3 = default and Color3.fromRGB(90, 170, 255) or Color3.fromRGB(45, 45, 58)
-    pill.BackgroundTransparency = 0.2
     pill.BorderSizePixel = 0
     pill.Parent = row
     local pc = Instance.new("UICorner") pc.CornerRadius = UDim.new(1,0) pc.Parent = pill
@@ -258,7 +213,6 @@ local function makeSlider(parent, text, min, max, default, cb, order, isFloat)
     bar.Size = UDim2.new(1, 0, 0, 5)
     bar.Position = UDim2.fromOffset(0, 28)
     bar.BackgroundColor3 = Color3.fromRGB(40, 42, 55)
-    bar.BackgroundTransparency = 0.2
     bar.BorderSizePixel = 0
     bar.Parent = row
     local bc = Instance.new("UICorner") bc.CornerRadius = UDim.new(1,0) bc.Parent = bar
@@ -339,8 +293,7 @@ local function makeDropdown(parent, text, options, default, cb, order)
     btn.Size = UDim2.new(1, 0, 0, 30)
     btn.Position = UDim2.fromOffset(0, 20)
     btn.BackgroundColor3 = Color3.fromRGB(35, 37, 48)
-    btn.BackgroundTransparency = 0.25
-    btn.Text = "  " .. default .. "  ▾"
+    btn.Text = "  " .. default .. "  v"
     btn.TextColor3 = Color3.fromRGB(240, 242, 250)
     btn.TextSize = 13
     btn.Font = Enum.Font.GothamMedium
@@ -353,7 +306,6 @@ local function makeDropdown(parent, text, options, default, cb, order)
     list.Size = UDim2.new(1, 0, 0, #options * 28)
     list.Position = UDim2.fromOffset(0, 52)
     list.BackgroundColor3 = Color3.fromRGB(20, 22, 30)
-    list.BackgroundTransparency = 0.1
     list.BorderSizePixel = 0
     list.Visible = false
     list.ZIndex = 10
@@ -374,15 +326,13 @@ local function makeDropdown(parent, text, options, default, cb, order)
         o.Parent = list
         o.MouseButton1Click:Connect(function()
             state = opt
-            btn.Text = "  " .. opt .. "  ▾"
-            list.Visible = false
-            open = false
+            btn.Text = "  " .. opt .. "  v"
+            list.Visible = false open = false
             pcall(cb, state)
         end)
     end
     btn.MouseButton1Click:Connect(function()
-        open = not open
-        list.Visible = open
+        open = not open list.Visible = open
     end)
     return holder
 end
@@ -415,7 +365,6 @@ local function makeColorPicker(parent, text, default, cb, order)
     panel.Size = UDim2.new(1, 0, 0, 72)
     panel.Position = UDim2.fromOffset(0, 34)
     panel.BackgroundColor3 = Color3.fromRGB(25, 27, 36)
-    panel.BackgroundTransparency = 0.2
     panel.BorderSizePixel = 0
     panel.Visible = false
     panel.Parent = holder
@@ -478,19 +427,55 @@ local function makeColorPicker(parent, text, default, cb, order)
 end
 
 -- ═══════════════════════════════════════════
--- BUILD MENU
+-- SCREEN GUI (parent resolved safely)
 -- ═══════════════════════════════════════════
 local gui = Instance.new("ScreenGui")
-gui.Name = "TD_GlassMenu"
+gui.Name = "TD_GlassMenu_" .. tostring(math.random(1000, 9999))
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.DisplayOrder = 999999
-do
-    local ok = pcall(function() gui.Parent = game:GetService("CoreGui") end)
-    if not ok or not gui.Parent then gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+
+-- try CoreGui, then PlayerGui, then fallback
+local parented = false
+pcall(function()
+    gui.Parent = game:GetService("CoreGui")
+    parented = true
+end)
+if not parented or not gui.Parent then
+    local ok2 = pcall(function()
+        gui.Parent = LocalPlayer:WaitForChild("PlayerGui", 5)
+        parented = true
+    end)
+    if not ok2 or not gui.Parent then
+        gui.Parent = game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    end
 end
 
+-- ── FLOATING OPEN BUTTON (always visible, draggable, never breaks) ──
+local openBtn = Instance.new("TextButton")
+openBtn.Name = "TD_OpenBtn"
+openBtn.Size = UDim2.fromOffset(60, 60)
+openBtn.Position = UDim2.new(0, 20, 0.5, -30)
+openBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
+openBtn.BackgroundTransparency = 0.35
+openBtn.Text = "TD"
+openBtn.TextColor3 = Color3.fromRGB(120, 190, 255)
+openBtn.TextSize = 20
+openBtn.Font = Enum.Font.GothamBold
+openBtn.BorderSizePixel = 0
+openBtn.Active = true
+openBtn.Draggable = true
+openBtn.ZIndex = 1000
+openBtn.Parent = gui
+local obc = Instance.new("UICorner") obc.CornerRadius = UDim.new(1, 0) obc.Parent = openBtn
+local obs = Instance.new("UIStroke")
+obs.Color = Color3.fromRGB(140, 190, 255)
+obs.Transparency = 0.5
+obs.Thickness = 1.5
+obs.Parent = openBtn
+
+-- ── MAIN PANEL ──
 local main = glass(gui, UDim2.fromOffset(440, 560), UDim2.new(0.5, -220, 0.5, -280), 16)
 main.Active = true
 main.Draggable = true
@@ -517,7 +502,7 @@ local sub = Instance.new("TextLabel")
 sub.Size = UDim2.new(1, -60, 0, 14)
 sub.Position = UDim2.fromOffset(16, 28)
 sub.BackgroundTransparency = 1
-sub.Text = "full suite · v8"
+sub.Text = "full suite · v9"
 sub.TextColor3 = Color3.fromRGB(120, 185, 255)
 sub.TextSize = 10
 sub.Font = Enum.Font.Gotham
@@ -528,10 +513,9 @@ local closeBtn = Instance.new("TextButton")
 closeBtn.Size = UDim2.fromOffset(26, 26)
 closeBtn.Position = UDim2.new(1, -38, 0, 9)
 closeBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 70)
-closeBtn.BackgroundTransparency = 0.15
-closeBtn.Text = "×"
+closeBtn.Text = "x"
 closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-closeBtn.TextSize = 17
+closeBtn.TextSize = 15
 closeBtn.Font = Enum.Font.GothamBold
 closeBtn.BorderSizePixel = 0
 closeBtn.Parent = titleBar
@@ -555,7 +539,6 @@ local function switchTab(name)
     for n, p in pairs(pages) do p.Visible = (n == name) end
     for n, b in pairs(tabButtons) do
         b.BackgroundColor3 = (n == name) and Color3.fromRGB(90, 170, 255) or Color3.fromRGB(35, 37, 48)
-        b.BackgroundTransparency = (n == name) and 0.15 or 0.4
     end
 end
 
@@ -563,7 +546,6 @@ local function makeTabButton(name)
     local b = Instance.new("TextButton")
     b.Size = UDim2.fromOffset(90, 30)
     b.BackgroundColor3 = Color3.fromRGB(35, 37, 48)
-    b.BackgroundTransparency = 0.4
     b.Text = name
     b.TextColor3 = Color3.fromRGB(240, 242, 250)
     b.TextSize = 12
@@ -584,7 +566,6 @@ local function makePage(name)
     s.BorderSizePixel = 0
     s.ScrollBarThickness = 3
     s.ScrollBarImageColor3 = Color3.fromRGB(100, 180, 255)
-    s.ScrollBarImageTransparency = 0.4
     s.CanvasSize = UDim2.new(0, 0, 0, 0)
     s.AutomaticCanvasSize = Enum.AutomaticSize.Y
     s.Visible = false
@@ -611,6 +592,7 @@ local combatPage = makePage("Combat")
 local espPage = makePage("ESP")
 local settingsPage = makePage("Settings")
 
+-- ── HOME ──
 makeHeader(homePage, "STATUS", 1)
 makeToggle(homePage, "ESP Master", false, function(v) Config.ESP.Enabled = v end, 2)
 makeToggle(homePage, "Aimbot", false, function(v) Config.Aim.Enabled = v end, 3)
@@ -637,6 +619,7 @@ end, 7)
 makeToggle(homePage, "NoRecoil", false, function(v) Config.Misc.NoRecoil = v end, 8)
 makeToggle(homePage, "NoSpread", false, function(v) Config.Misc.NoSpread = v end, 9)
 
+-- ── COMBAT ──
 makeHeader(combatPage, "AIMBOT", 1)
 makeToggle(combatPage, "Aimbot (hold RMB)", false, function(v) Config.Aim.Enabled = v end, 2)
 makeToggle(combatPage, "AimLock (continuous snap)", false, function(v) Config.Aim.AimLock = v end, 3)
@@ -649,17 +632,16 @@ makeToggle(combatPage, "Team Check", false, function(v) Config.Aim.TeamCheck = v
 makeToggle(combatPage, "Include NPCs", true, function(v) Config.Aim.IncludeNPCs = v end, 10)
 makeToggle(combatPage, "FOV Ring", false, function(v) Config.Aim.FOVRing = v end, 11)
 makeColorPicker(combatPage, "FOV Ring Color", Color3.fromRGB(120, 190, 255), function(c) Config.Aim.FOVRingColor = c end, 12)
-
 makeHeader(combatPage, "TRIGGERBOT", 13)
 makeToggle(combatPage, "Triggerbot", false, function(v) Config.Aim.Triggerbot = v end, 14)
 makeSlider(combatPage, "Trigger Delay (s)", 0.01, 0.50, 0.01, function(v) Config.Aim.TriggerDelay = v end, 15, true)
 
+-- ── ESP ──
 makeHeader(espPage, "TARGETS", 1)
 makeToggle(espPage, "ESP Enabled", false, function(v) Config.ESP.Enabled = v end, 2)
 makeToggle(espPage, "Players", true, function(v) Config.ESP.Players = v end, 3)
 makeToggle(espPage, "NPCs", true, function(v) Config.ESP.NPCs = v end, 4)
 makeToggle(espPage, "Team Colors (green/red)", true, function(v) Config.ESP.TeamColors = v end, 5)
-
 makeHeader(espPage, "VISUALS", 6)
 makeToggle(espPage, "Highlight", false, function(v) Config.ESP.Highlight = v end, 7)
 makeToggle(espPage, "WallHack (AlwaysOnTop)", false, function(v) Config.ESP.WallHack = v end, 8)
@@ -669,34 +651,65 @@ makeToggle(espPage, "Tracer", false, function(v) Config.ESP.Tracer = v end, 11)
 makeToggle(espPage, "Name", false, function(v) Config.ESP.Name = v end, 12)
 makeToggle(espPage, "Health", false, function(v) Config.ESP.Health = v end, 13)
 makeToggle(espPage, "Distance", false, function(v) Config.ESP.Distance = v end, 14)
-
 makeHeader(espPage, "RANGE", 15)
 makeSlider(espPage, "ESP Min Dist", 250, 1000, 250, function(v) Config.ESP.MinDist = v end, 16)
 makeSlider(espPage, "ESP Max Dist", 250, 1000, 250, function(v) Config.ESP.MaxDist = v end, 17)
-
 makeHeader(espPage, "WEAPON ESP", 18)
 makeToggle(espPage, "Enable Weapon ESP", false, function(v) Config.WeaponESP.Enabled = v end, 19)
 makeSlider(espPage, "Weapon Min Dist", 250, 1000, 250, function(v) Config.WeaponESP.MinDist = v end, 20)
 makeSlider(espPage, "Weapon Max Dist", 250, 1000, 250, function(v) Config.WeaponESP.MaxDist = v end, 21)
 
+-- ── SETTINGS ──
 makeHeader(settingsPage, "MENU", 1)
-makeHeader(settingsPage, "Open/Close: INSERT", 2)
-makeHeader(settingsPage, "Drag: title bar", 3)
-makeHeader(settingsPage, "TEAM COLORS", 4)
-makeColorPicker(settingsPage, "Self (team)", Color3.fromRGB(80, 220, 120), function(c) Config.ESP.ColorSelf = c end, 5)
-makeColorPicker(settingsPage, "Enemy", Color3.fromRGB(230, 70, 70), function(c) Config.ESP.ColorEnemy = c end, 6)
-makeColorPicker(settingsPage, "Neutral", Color3.fromRGB(200, 200, 210), function(c) Config.ESP.ColorNeutral = c end, 7)
+makeHeader(settingsPage, "Toggle: INSERT / RightShift / F1", 2)
+makeHeader(settingsPage, "Also: floating TD button", 3)
+makeHeader(settingsPage, "Drag: title bar", 4)
+makeHeader(settingsPage, "TEAM COLORS", 5)
+makeColorPicker(settingsPage, "Self (team)", Color3.fromRGB(80, 220, 120), function(c) Config.ESP.ColorSelf = c end, 6)
+makeColorPicker(settingsPage, "Enemy", Color3.fromRGB(230, 70, 70), function(c) Config.ESP.ColorEnemy = c end, 7)
+makeColorPicker(settingsPage, "Neutral", Color3.fromRGB(200, 200, 210), function(c) Config.ESP.ColorNeutral = c end, 8)
 
 switchTab("Home")
 
 -- ═══════════════════════════════════════════
--- INSERT TOGGLE
+-- OPEN/CLOSE — four redundant paths
 -- ═══════════════════════════════════════════
+local function toggleMenu()
+    main.Visible = not main.Visible
+end
+
+-- path 1: UserInputService (fires when game hasn't consumed input)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.Insert then
-        main.Visible = not main.Visible
+    local k = input.KeyCode
+    if k == Enum.KeyCode.Insert
+    or k == Enum.KeyCode.RightShift
+    or k == Enum.KeyCode.F1 then
+        toggleMenu()
     end
+end)
+
+-- path 2: InputService without gameProcessed gate (catches chat-focused case)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    local k = input.KeyCode
+    if gameProcessed and (k == Enum.KeyCode.Insert or k == Enum.KeyCode.RightShift or k == Enum.KeyCode.F1) then
+        -- only act if focus is not a textbox
+        local focused = UserInputService:GetFocusedTextBox()
+        if not focused then
+            toggleMenu()
+        end
+    end
+end)
+
+-- path 3: floating button
+openBtn.MouseButton1Click:Connect(toggleMenu)
+
+-- path 4: ContextActionService (bypasses some executors' input filtering)
+pcall(function()
+    local CAS = game:GetService("ContextActionService")
+    CAS:BindAction("TD_ToggleMenu", function(_, state)
+        if state == Enum.UserInputState.Begin then toggleMenu() end
+    end, false, Enum.KeyCode.Insert, Enum.KeyCode.RightShift, Enum.KeyCode.F1)
 end)
 
 -- ═══════════════════════════════════════════
@@ -708,37 +721,24 @@ local fovRing = nil
 
 local function newBox(color)
     local outer = Drawing.new("Square")
-    outer.Filled = false
-    outer.Color = color
-    outer.Thickness = 1.5
-    outer.Transparency = 0.9
-    outer.Visible = false
+    outer.Filled = false outer.Color = color
+    outer.Thickness = 1.5 outer.Transparency = 0.9 outer.Visible = false
     local inner = Drawing.new("Square")
-    inner.Filled = true
-    inner.Color = color
-    inner.Thickness = 0
-    inner.Transparency = 0.08
-    inner.Visible = false
+    inner.Filled = true inner.Color = color
+    inner.Thickness = 0 inner.Transparency = 0.08 inner.Visible = false
     return { outer = outer, inner = inner }
 end
 
 local function newTracer(color)
     local l = Drawing.new("Line")
-    l.Color = color
-    l.Thickness = 1.5
-    l.Transparency = 0.7
-    l.Visible = false
+    l.Color = color l.Thickness = 1.5 l.Transparency = 0.7 l.Visible = false
     return l
 end
 
 local function newText(color, size)
     local t = Drawing.new("Text")
-    t.Color = color
-    t.Size = size
-    t.Center = true
-    t.Outline = true
-    t.OutlineColor = Color3.fromRGB(0, 0, 0)
-    t.Visible = false
+    t.Color = color t.Size = size t.Center = true t.Outline = true
+    t.OutlineColor = Color3.fromRGB(0, 0, 0) t.Visible = false
     return t
 end
 
@@ -757,11 +757,8 @@ end
 
 local function getEntityColor(model)
     local plr = Players:GetPlayerFromCharacter(model)
-    if plr and Config.ESP.TeamColors then
-        return teamColor(plr)
-    elseif plr then
-        return Color3.fromRGB(120, 190, 255)
-    end
+    if plr and Config.ESP.TeamColors then return teamColor(plr)
+    elseif plr then return Color3.fromRGB(120, 190, 255) end
     return Config.ESP.ColorEnemy
 end
 
@@ -799,11 +796,8 @@ local function collectTargets()
 end
 
 local function aimTargetPart(entry)
-    if entry.player then
-        return getPlayerAimPart(entry.model)
-    else
-        return getNPCPart(entry.model)
-    end
+    if entry.player then return getPlayerAimPart(entry.model)
+    else return getNPCPart(entry.model) end
 end
 
 local function hasGunEquipped()
@@ -819,12 +813,9 @@ local function closestAim()
     if Config.Aim.RequireGun and not hasGunEquipped() then return nil end
     local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     local best, bestDist = nil, Config.Aim.FOV
-    local entries = collectTargets()
-    for _, entry in ipairs(entries) do
+    for _, entry in ipairs(collectTargets()) do
         if entry.player and Config.Aim.TeamCheck and isTeammate(entry.player) then
-            -- skip teammates
         elseif (not entry.player) and (not Config.Aim.IncludeNPCs) then
-            -- skip NPCs
         else
             local part = aimTargetPart(entry)
             if part then
@@ -832,8 +823,7 @@ local function closestAim()
                 if on then
                     local d = (Vector2.new(sp.X, sp.Y) - center).Magnitude
                     if d < bestDist and isVisible(part) then
-                        bestDist = d
-                        best = part
+                        bestDist = d best = part
                     end
                 end
             end
@@ -847,17 +837,13 @@ if HAS_DRAWING then
         if Config.Aim.FOVRing then
             if not fovRing then
                 fovRing = Drawing.new("Circle")
-                fovRing.Filled = false
-                fovRing.Thickness = 1.5
-                fovRing.Transparency = 0.75
+                fovRing.Filled = false fovRing.Thickness = 1.5 fovRing.Transparency = 0.75
             end
             fovRing.Visible = true
             fovRing.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
             fovRing.Radius = Config.Aim.FOV
             fovRing.Color = Config.Aim.FOVRingColor
-        elseif fovRing then
-            fovRing.Visible = false
-        end
+        elseif fovRing then fovRing.Visible = false end
 
         if Config.ESP.Enabled then
             local entries = collectTargets()
@@ -876,36 +862,25 @@ if HAS_DRAWING then
                 if wantHl then
                     if not hl then
                         hl = Instance.new("Highlight")
-                        hl.Name = "TD_HL"
-                        hl.Adornee = model
+                        hl.Name = "TD_HL" hl.Adornee = model
                         hl.OutlineColor = Color3.fromRGB(255, 255, 255)
-                        hl.OutlineTransparency = 0.4
-                        hl.Parent = model
+                        hl.OutlineTransparency = 0.4 hl.Parent = model
                     end
                     hl.FillColor = col
-                    if Config.ESP.Chams then
-                        hl.FillTransparency = 0.45
-                    elseif Config.ESP.WallHack then
-                        hl.FillTransparency = 0.2
-                    else
-                        hl.FillTransparency = 0.75
-                    end
+                    if Config.ESP.Chams then hl.FillTransparency = 0.45
+                    elseif Config.ESP.WallHack then hl.FillTransparency = 0.2
+                    else hl.FillTransparency = 0.75 end
                     hl.DepthMode = (Config.ESP.WallHack or Config.ESP.Chams)
                         and Enum.HighlightDepthMode.AlwaysOnTop
                         or Enum.HighlightDepthMode.Occluded
-                elseif hl then
-                    hl:Destroy()
-                end
+                elseif hl then hl:Destroy() end
 
                 if not show then
                     local c = espCache[model]
                     if c then
-                        c.box.outer.Visible = false
-                        c.box.inner.Visible = false
-                        c.name.Visible = false
-                        c.health.Visible = false
-                        c.dist.Visible = false
-                        c.tracer.Visible = false
+                        c.box.outer.Visible = false c.box.inner.Visible = false
+                        c.name.Visible = false c.health.Visible = false
+                        c.dist.Visible = false c.tracer.Visible = false
                     end
                     continue
                 end
@@ -918,19 +893,14 @@ if HAS_DRAWING then
 
                 if not espCache[model] then
                     espCache[model] = {
-                        box = newBox(col),
-                        name = newText(col, 13),
+                        box = newBox(col), name = newText(col, 13),
                         health = newText(Color3.fromRGB(120, 255, 120), 11),
-                        dist = newText(col, 12),
-                        tracer = newTracer(col),
+                        dist = newText(col, 12), tracer = newTracer(col),
                     }
                 end
                 local c = espCache[model]
-                c.box.outer.Color = col
-                c.box.inner.Color = col
-                c.name.Color = col
-                c.dist.Color = col
-                c.tracer.Color = col
+                c.box.outer.Color = col c.box.inner.Color = col
+                c.name.Color = col c.dist.Color = col c.tracer.Color = col
 
                 local h = math.abs(ts.Y - bs.Y)
                 local w = h * 0.6
@@ -945,66 +915,43 @@ if HAS_DRAWING then
                     c.box.outer.Position = Vector2.new(x, y)
                     c.box.outer.Visible = true
                 else
-                    c.box.inner.Visible = false
-                    c.box.outer.Visible = false
+                    c.box.inner.Visible = false c.box.outer.Visible = false
                 end
 
                 local label = entry.player and entry.player.Name or model.Name
                 if Config.ESP.Name then
-                    c.name.Text = label
-                    c.name.Position = Vector2.new(ts.X, y - 16)
-                    c.name.Visible = true
-                else
-                    c.name.Visible = false
-                end
+                    c.name.Text = label c.name.Position = Vector2.new(ts.X, y - 16) c.name.Visible = true
+                else c.name.Visible = false end
 
                 if Config.ESP.Health then
-                    local hp = math.floor(hum.Health)
-                    local maxhp = math.floor(hum.MaxHealth)
-                    c.health.Text = hp .. "/" .. maxhp
-                    c.health.Position = Vector2.new(ts.X, y - 30)
-                    c.health.Visible = true
-                else
-                    c.health.Visible = false
-                end
+                    c.health.Text = math.floor(hum.Health) .. "/" .. math.floor(hum.MaxHealth)
+                    c.health.Position = Vector2.new(ts.X, y - 30) c.health.Visible = true
+                else c.health.Visible = false end
 
                 if Config.ESP.Distance then
                     c.dist.Text = math.floor(dist) .. "m"
-                    c.dist.Position = Vector2.new(ts.X, y + h + 6)
-                    c.dist.Visible = true
-                else
-                    c.dist.Visible = false
-                end
+                    c.dist.Position = Vector2.new(ts.X, y + h + 6) c.dist.Visible = true
+                else c.dist.Visible = false end
 
                 if Config.ESP.Tracer then
                     c.tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-                    c.tracer.To = Vector2.new(ts.X, ts.Y)
-                    c.tracer.Visible = true
-                else
-                    c.tracer.Visible = false
-                end
+                    c.tracer.To = Vector2.new(ts.X, ts.Y) c.tracer.Visible = true
+                else c.tracer.Visible = false end
             end
-
             for model, c in pairs(espCache) do
                 if not seen[model] then
-                    c.box.outer.Visible = false
-                    c.box.inner.Visible = false
-                    c.name.Visible = false
-                    c.health.Visible = false
-                    c.dist.Visible = false
-                    c.tracer.Visible = false
+                    c.box.outer.Visible = false c.box.inner.Visible = false
+                    c.name.Visible = false c.health.Visible = false
+                    c.dist.Visible = false c.tracer.Visible = false
                     local hl = model:FindFirstChild("TD_HL")
                     if hl then hl:Destroy() end
                 end
             end
         else
             for model, c in pairs(espCache) do
-                c.box.outer.Visible = false
-                c.box.inner.Visible = false
-                c.name.Visible = false
-                c.health.Visible = false
-                c.dist.Visible = false
-                c.tracer.Visible = false
+                c.box.outer.Visible = false c.box.inner.Visible = false
+                c.name.Visible = false c.health.Visible = false
+                c.dist.Visible = false c.tracer.Visible = false
                 local hl = model:FindFirstChild("TD_HL")
                 if hl then hl:Destroy() end
             end
@@ -1015,8 +962,7 @@ if HAS_DRAWING then
                 if depth > 4 then return end
                 for _, obj in ipairs(container:GetChildren()) do
                     if obj:IsA("Model") and isWeaponModel(obj) then
-                        local handle = obj:FindFirstChild("Handle")
-                            or obj:FindFirstChildOfClass("BasePart")
+                        local handle = obj:FindFirstChild("Handle") or obj:FindFirstChildOfClass("BasePart")
                         local pos = handle and handle.Position or obj:GetPivot().Position
                         local d = (Camera.CFrame.Position - pos).Magnitude
                         if d >= Config.WeaponESP.MinDist and d <= Config.WeaponESP.MaxDist then
@@ -1025,8 +971,7 @@ if HAS_DRAWING then
                                 local whl = obj:FindFirstChild("TD_WHL")
                                 if not whl then
                                     whl = Instance.new("Highlight")
-                                    whl.Name = "TD_WHL"
-                                    whl.Adornee = obj
+                                    whl.Name = "TD_WHL" whl.Adornee = obj
                                     whl.FillColor = Color3.fromRGB(255, 190, 90)
                                     whl.FillTransparency = 0.6
                                     whl.OutlineColor = Color3.fromRGB(255, 255, 255)
@@ -1058,6 +1003,9 @@ if HAS_DRAWING then
     end)
 end
 
+-- ═══════════════════════════════════════════
+-- AIMBOT / AIMLOCK / TRIGGERBOT
+-- ═══════════════════════════════════════════
 local triggerLast = 0
 
 UserInputService.InputBegan:Connect(function(i, proc)
@@ -1065,20 +1013,18 @@ UserInputService.InputBegan:Connect(function(i, proc)
     if i.UserInputType == Config.Aim.Key and Config.Aim.Enabled and not Config.Aim.AimLock then
         local t = closestAim()
         if t then
-            local smooth = math.clamp(Config.Aim.Smooth, 0.02, 1.0)
-            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, t.Position), smooth)
+            Camera.CFrame = Camera.CFrame:Lerp(
+                CFrame.new(Camera.CFrame.Position, t.Position),
+                math.clamp(Config.Aim.Smooth, 0.02, 1.0))
         end
     end
 end)
 
-RunService.RenderStepped:Connect(function(dt)
+RunService.RenderStepped:Connect(function()
     if Config.Aim.AimLock and Config.Aim.Enabled then
         local t = closestAim()
-        if t then
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, t.Position)
-        end
+        if t then Camera.CFrame = CFrame.new(Camera.CFrame.Position, t.Position) end
     end
-
     if Config.Aim.Triggerbot then
         local now = tick()
         if now - triggerLast >= Config.Aim.TriggerDelay then
@@ -1091,9 +1037,7 @@ RunService.RenderStepped:Connect(function(dt)
                         or tool:FindFirstChildOfClass("RemoteFunction")
                     if remote then
                         pcall(function()
-                            if remote:IsA("RemoteEvent") then
-                                remote:FireServer()
-                            end
+                            if remote:IsA("RemoteEvent") then remote:FireServer() end
                         end)
                     end
                 end
@@ -1101,7 +1045,6 @@ RunService.RenderStepped:Connect(function(dt)
             end
         end
     end
-
     if Config.Misc.NoRecoil then
         local char = LocalPlayer.Character
         if char then
@@ -1121,9 +1064,7 @@ task.spawn(function()
                 if tool then
                     for _, name in ipairs({"Spread", "spread", "SpreadValue", "Recoil", "recoil"}) do
                         local v = tool:FindFirstChild(name) or char:FindFirstChild(name)
-                        if v and v:IsA("NumberValue") then
-                            v.Value = 0
-                        end
+                        if v and v:IsA("NumberValue") then v.Value = 0 end
                     end
                 end
             end
@@ -1133,14 +1074,10 @@ end)
 
 LocalPlayer.CharacterAdded:Connect(function()
     for _, c in pairs(espCache) do
-        c.box.outer:Remove()
-        c.box.inner:Remove()
-        c.name:Remove()
-        c.health:Remove()
-        c.dist:Remove()
-        c.tracer:Remove()
+        c.box.outer:Remove() c.box.inner:Remove()
+        c.name:Remove() c.health:Remove() c.dist:Remove() c.tracer:Remove()
     end
     espCache = {}
 end)
 
-print("[TD] v8 loaded. INSERT toggles menu. all off by default.")
+print("[TD] v9 loaded. Toggle: INSERT / RightShift / F1, or click the floating TD button.")
