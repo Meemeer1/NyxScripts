@@ -1,5 +1,5 @@
--- language: Lua, file: trench_decay_v7.lua, target: Roblox Trench Decay, universal executor
--- *no key. RightShift opens/closes menu. players + NPCs. real weapon list.*
+-- language: Lua, file: trench_decay_v8.lua, target: Roblox Trench Decay, universal executor
+-- *no key. INSERT opens/closes menu. players + NPCs. real weapon list.*
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -62,12 +62,7 @@ local Config = {
     },
 }
 
--- ═══════════════════════════════════════════
--- REAL TRENCH DECAY WEAPON LIST
--- scanned from WeaponModels folder hierarchy
--- ═══════════════════════════════════════════
 local WEAPON_NAMES = {
-    -- rifles / SMGs / LMGs
     "AK-74", "AKM", "Aegis", "Bergmann MP18", "Carnage Carbine",
     "Chauchat", "Double-0", "Farquhar Hill 1909", "Hellriegel 1915",
     "Huot Huntermarch", "Lee Enfield", "Lewis Gun", "Lil Timothy",
@@ -76,10 +71,8 @@ local WEAPON_NAMES = {
     "Mosin Nagant", "Musket", "Nagant 1883 \"Ordem\"", "PKM",
     "RPG-7", "Revolver", "Rotinv's Minigun", "Taurus 82",
     "The \"Tommy\" M1918", "Type 38 Arisaka",
-    -- special / named
     "The Demolisher", "The Eternal Chime", "The Hand Cannon",
     "The Revolutionary",
-    -- melee / tools
     "Bandage", "Colonels Sabre", "Commandants Cuirassier",
     "Flare Gun", "Guts and Glory", "Medkit",
     "Trench Hammer", "Trench Hatchet", "Trench Knife", "Trench Mace",
@@ -87,7 +80,6 @@ local WEAPON_NAMES = {
     "Trench Sickle",
 }
 
--- case-insensitive match against the model name; handles parent folder too
 local function isWeaponModel(obj)
     if not obj or not obj:IsA("Model") then return false end
     local nm = obj.Name:lower()
@@ -99,9 +91,6 @@ local function isWeaponModel(obj)
     return false
 end
 
--- ═══════════════════════════════════════════
--- TEAM RESOLVER
--- ═══════════════════════════════════════════
 local function getTeam(player)
     if not player then return nil end
     if player.Team then return player.Team end
@@ -130,9 +119,6 @@ local function teamColor(player)
     return Config.ESP.ColorEnemy
 end
 
--- ═══════════════════════════════════════════
--- NPC DETECTION
--- ═══════════════════════════════════════════
 local function isHostileNPC(model)
     if not model or not model:IsA("Model") then return false end
     if model == LocalPlayer.Character then return false end
@@ -492,7 +478,7 @@ local function makeColorPicker(parent, text, default, cb, order)
 end
 
 -- ═══════════════════════════════════════════
--- BUILD MENU — TABS
+-- BUILD MENU
 -- ═══════════════════════════════════════════
 local gui = Instance.new("ScreenGui")
 gui.Name = "TD_GlassMenu"
@@ -531,7 +517,7 @@ local sub = Instance.new("TextLabel")
 sub.Size = UDim2.new(1, -60, 0, 14)
 sub.Position = UDim2.fromOffset(16, 28)
 sub.BackgroundTransparency = 1
-sub.Text = "full suite · v7"
+sub.Text = "full suite · v8"
 sub.TextColor3 = Color3.fromRGB(120, 185, 255)
 sub.TextSize = 10
 sub.Font = Enum.Font.Gotham
@@ -694,7 +680,7 @@ makeSlider(espPage, "Weapon Min Dist", 250, 1000, 250, function(v) Config.Weapon
 makeSlider(espPage, "Weapon Max Dist", 250, 1000, 250, function(v) Config.WeaponESP.MaxDist = v end, 21)
 
 makeHeader(settingsPage, "MENU", 1)
-makeHeader(settingsPage, "Open/Close: RightShift", 2)
+makeHeader(settingsPage, "Open/Close: INSERT", 2)
 makeHeader(settingsPage, "Drag: title bar", 3)
 makeHeader(settingsPage, "TEAM COLORS", 4)
 makeColorPicker(settingsPage, "Self (team)", Color3.fromRGB(80, 220, 120), function(c) Config.ESP.ColorSelf = c end, 5)
@@ -703,9 +689,12 @@ makeColorPicker(settingsPage, "Neutral", Color3.fromRGB(200, 200, 210), function
 
 switchTab("Home")
 
+-- ═══════════════════════════════════════════
+-- INSERT TOGGLE
+-- ═══════════════════════════════════════════
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.RightShift then
+    if input.KeyCode == Enum.KeyCode.Insert then
         main.Visible = not main.Visible
     end
 end)
@@ -790,7 +779,6 @@ local function collectTargets()
         end
     end
     if Config.ESP.NPCs then
-        -- scan workspace recursively for humanoid models
         local function scan(container, depth)
             if depth > 3 then return end
             for _, m in ipairs(container:GetChildren()) do
@@ -854,9 +842,6 @@ local function closestAim()
     return best
 end
 
--- ═══════════════════════════════════════════
--- MAIN LOOP
--- ═══════════════════════════════════════════
 if HAS_DRAWING then
     RunService.RenderStepped:Connect(function()
         if Config.Aim.FOVRing then
@@ -1025,9 +1010,7 @@ if HAS_DRAWING then
             end
         end
 
-        -- ── WEAPON ESP (real folder structure) ──
         if Config.WeaponESP.Enabled then
-            -- find WeaponModels folder anywhere in Workspace
             local function scanWeapons(container, depth)
                 if depth > 4 then return end
                 for _, obj in ipairs(container:GetChildren()) do
@@ -1075,9 +1058,6 @@ if HAS_DRAWING then
     end)
 end
 
--- ═══════════════════════════════════════════
--- AIMBOT / AIMLOCK / TRIGGERBOT
--- ═══════════════════════════════════════════
 local triggerLast = 0
 
 UserInputService.InputBegan:Connect(function(i, proc)
@@ -1163,4 +1143,4 @@ LocalPlayer.CharacterAdded:Connect(function()
     espCache = {}
 end)
 
-print("[TD] v7 loaded. RightShift toggles menu. real weapon list wired.")
+print("[TD] v8 loaded. INSERT toggles menu. all off by default.")
