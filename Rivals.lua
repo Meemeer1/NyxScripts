@@ -521,38 +521,49 @@ end)
 -- ============================================================================
 -- TARGET SELECTION
 -- ============================================================================
+-- language: Lua (Luau), drop-in replacement for getBestTarget
+-- put this in place of the existing function
+-- also add: CFG.AimbotDebug = true  at the top of your CFG table for console output
+
 local function getBestTarget()
     local vp = cam.ViewportSize
     local cx, cy = vp.X / 2, vp.Y / 2
     local bestPart, bestScore = nil, math.huge
+    local candidatesSeen = 0
+
     for _, pl in ipairs(Players:GetPlayers()) do
-        if pl ~= lp and isAlive(pl) then
-            local skip = false
-            if CFG.AimbotTeamCheck and isTeammate(pl) then skip = true end
-            if dist(pl) > CFG.AimbotMaxDist then skip = true end
-            if CFG.AimbotRequireGun and not hasGun() then skip = true end
-            if not skip then
-                local ch = chr(pl)
-                local pt = ch and (ch:FindFirstChild(CFG.AimbotPart) or root(pl))
-                if pt then
-                    local blocked = false
-                    if CFG.AimbotWallCheck then
-                        local me = root(lp)
-                        if me then
-                            local params = RaycastParams.new()
-                            params.FilterType = Enum.RaycastFilterType.Exclude
-                            params.FilterDescendantsInstances = {ch, chr(lp)}
-                            local res = workspace:Raycast(me.Position, pt.Position - me.Position, params)
-                            if res then blocked = true end
+        if pl ~= lp then
+            local alive = isAlive(pl)
+            if alive then
+                local skip = false
+                if CFG.AimbotTeamCheck and isTeammate(pl) then skip = true end
+                if dist(pl) > CFG.AimbotMaxDist then skip = true end
+                if CFG.AimbotRequireGun and not hasGun() then skip = true end
+                if not skip then
+                    local ch = chr(pl)
+                    local pt = ch and (ch:FindFirstChild(CFG.AimbotPart) or root(pl))
+                    if pt then
+                        local blocked = false
+                        if CFG.AimbotWallCheck then
+                            local me = root(lp)
+                            if me then
+                                local params = RaycastParams.new()
+                                params.FilterType = Enum.RaycastFilterType.Exclude
+                                params.FilterDescendantsInstances = {ch, chr(lp)}
+                                local res = workspace:Raycast(me.Position, pt.Position - me.Position, params)
+                                if res then blocked = true end
+                            end
                         end
-                    end
-                    if not blocked then
-                        local sp, onScreen = cam:WorldToViewportPoint(pt.Position)
-                        if onScreen and sp.Z > 0 then
-                            local sd = math.sqrt((sp.X - cx)^2 + (sp.Y - cy)^2)
-                            if sd <= CFG.AimbotFOV and sd < bestScore then
-                                bestScore = sd
-                                bestPart = pt
+                        if not blocked then
+                            local sp, onScreen = cam:WorldToViewportPoint(pt.Position)
+                            -- REMOVED: sp.Z > 0 filter (was rejecting valid targets on some executors)
+                            if onScreen then
+                                local sd = math.sqrt((sp.X - cx)^2 + (sp.Y - cy)^2)
+                                candidatesSeen = candidatesSeen + 1
+                                if sd <= CFG.AimbotFOV and sd < bestScore then
+                                    bestScore = sd
+                                    bestPart = pt
+                                end
                             end
                         end
                     end
@@ -560,6 +571,17 @@ local function getBestTarget()
             end
         end
     end
+
+    if CFG.AimbotDebug then
+        print(string.format(
+            "[RIV] aim check  players=%d  onscreen=%d  fov=%d  best=%s",
+            #Players:GetPlayers(),
+            candidatesSeen,
+            CFG.AimbotFOV,
+            bestPart and bestPart:GetFullName() or "NONE"
+        ))
+    end
+
     return bestPart
 end
 
