@@ -1,26 +1,27 @@
 -- ============================================================================
--- NyxScript v2.1 — Valley Prison
+-- NyxScript v2.2 — Valley Prison
 -- Single-file, no fetch, no license. Right Shift to toggle.
--- v2.1 additions: reactive team-signature resolution, debounced RaycastParams,
--- 8-corner hitbox triggerbot, hold/release Tab while menu open.
+-- v2.2: FOV ring (Drawing), cursor-based silent aim, shift-lock-safe aimbot,
+-- real toggle off-states, Skeleton/Box/Tracer/Chams ESP, cheap item ESP,
+-- teleport-to-rack spawning, cuff auto-escape. DEX-informed remote targets.
 -- ============================================================================
 
 -- ============================================================================
 -- SECTION 1 — SERVICES & HELPERS
 -- ============================================================================
-local Players           = game:GetService("Players")
-local RunService        = game:GetService("RunService")
-local UserInputService  = game:GetService("UserInputService")
-local TweenService      = game:GetService("TweenService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local HttpService       = game:GetService("HttpService")
-local Lighting          = game:GetService("Lighting")
-local Teams             = game:GetService("Teams")
+local Players             = game:GetService("Players")
+local RunService          = game:GetService("RunService")
+local UserInputService    = game:GetService("UserInputService")
+local TweenService        = game:GetService("TweenService")
+local ReplicatedStorage   = game:GetService("ReplicatedStorage")
+local HttpService         = game:GetService("HttpService")
+local Lighting            = game:GetService("Lighting")
+local TeamsService        = game:GetService("Teams")
 local VirtualInputManager = game:GetService("VirtualInputManager")
-local lp                = Players.LocalPlayer
-local cam               = workspace.CurrentCamera
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local lp                  = Players.LocalPlayer
+local cam                 = workspace.CurrentCamera
 
--- Executor-safe lookups
 local function safeGetRawMetatable(o)
     local ok, mt = pcall(function() return getrawmetatable(o) end)
     if ok then return mt end
@@ -47,6 +48,20 @@ local function safeGetHui()
     end
     return nil
 end
+local function safeFireClickDetector(cd)
+    if type(fireclickdetector) == "function" then
+        local ok = pcall(fireclickdetector, cd)
+        if ok then return true end
+    end
+    return false
+end
+local function safeFireProximityPrompt(prompt, holdTime)
+    if type(fireproximityprompt) == "function" then
+        local ok = pcall(fireproximityprompt, prompt, holdTime or 0)
+        if ok then return true end
+    end
+    return false
+end
 
 local function chr(p) return p and p.Character end
 local function root(p) local c = chr(p); return c and c:FindFirstChild("HumanoidRootPart") end
@@ -66,20 +81,25 @@ end
 -- SECTION 2 — CONFIG
 -- ============================================================================
 local CFG = {
+    -- AIMBOT
     Aimbot              = false,
     AimbotFOV           = 150,
     AimbotSmooth        = 0.12,
     AimbotPart          = "Head",
     AimbotTeamCheck     = false,
-    AimbotRequireGun    = true,
+    AimbotRequireGun    = false,
     AimbotWallCheck     = true,
     AimbotFOVRing       = false,
     AimbotFOVRingColor  = Color3.fromRGB(0, 201, 185),
     Aimlock             = false,
+    AimbotForceAiming   = false,
     SilentAim           = false,
+    SilentAimFOV        = 150,
+    SilentAimWallCheck  = true,
     Triggerbot          = false,
     TriggerbotDelay     = 0.05,
 
+    -- WEAPON
     NoRecoil            = false,
     NoSpread            = false,
     RapidFire           = false,
@@ -87,36 +107,41 @@ local CFG = {
     AutoReload          = false,
     InstantEquip        = false,
 
+    -- HITBOX
     HitboxExpand        = false,
     HitboxSize          = 6,
 
+    -- ESP
     PlayerESP           = false,
     ESPFillColor        = Color3.fromRGB(99, 179, 237),
     ESPOutlineColor     = Color3.fromRGB(99, 179, 237),
     ESPFillTransparency = 0.75,
     ESPOutlineTransparency = 0,
     WallHack            = false,
+    ChamsESP            = false,
+    ChamsColor          = Color3.fromRGB(255, 165, 0),
     SkeletonESP         = false,
     SkeletonColor       = Color3.fromRGB(0, 201, 185),
-    NameESP             = false,
-    HealthESP           = false,
-    DistanceESP         = false,
     BoxESP              = false,
     BoxESPColor         = Color3.fromRGB(255, 255, 255),
     TracerESP           = false,
     TracerColor         = Color3.fromRGB(248, 113, 113),
     TracerOrigin        = "Bottom",
     TracerThickness     = 1.5,
+    NameESP             = false,
+    HealthESP           = false,
+    DistanceESP         = false,
     TeamColors          = true,
     ESPMaxDist          = 500,
-    ChamsESP            = false,
-    ChamsColor          = Color3.fromRGB(255, 165, 0),
 
+    -- ITEM ESP
     ItemESP             = false,
     WeaponESP           = false,
     KeycardESP          = false,
     ItemESPMaxDist      = 150,
+    ItemESPInterval     = 1.0,
 
+    -- MOVEMENT
     SpeedEnabled        = false,
     Speed               = 24,
     Fly                 = false,
@@ -136,10 +161,12 @@ local CFG = {
     TpToCursor          = false,
     TpToCursorKey       = Enum.KeyCode.T,
 
+    -- PLAYER BUFFS
     GodMode             = false,
     AntiStun            = false,
     InfHealth           = false,
 
+    -- VISUALS
     Fullbright          = false,
     NoFog               = false,
     TimeOfDay           = false,
@@ -153,20 +180,22 @@ local CFG = {
     CharColor           = Color3.fromRGB(255, 255, 255),
     CustomCharColor     = false,
 
+    -- PRISON
+    AutoEscapeCuffs     = false,
     BlockArrest         = false,
     BlockBan            = false,
-    AutoEscape          = false,
-    RemoveCuffs         = false,
+    LogRemotes          = false,
+    LogACTraffic        = false,
 
+    -- ANTI-CHEAT (spec floor: on from first frame)
     AntiKick            = true,
     AntiDisconnect      = false,
-    LogRemotes          = false,
 
+    -- GUI
     Open                = true,
     Page                = "Home",
     MenuKey             = Enum.KeyCode.RightShift,
     ShowNotifications   = true,
-    MenuSounds          = false,
 }
 
 -- ============================================================================
@@ -352,7 +381,7 @@ subtitle.Font = FONT
 subtitle.TextSize = 10
 subtitle.TextColor3 = C.textDim
 subtitle.TextXAlignment = Enum.TextXAlignment.Left
-subtitle.Text = "NyxScript  v2.1"
+subtitle.Text = "NyxScript  v2.2"
 subtitle.Parent = titleBar
 
 local function mkCircleBtn(color, glyph, x)
@@ -371,7 +400,6 @@ local function mkCircleBtn(color, glyph, x)
     Instance.new("UICorner", b).CornerRadius = UDim.new(1, 0)
     return b
 end
-
 local btnMin = mkCircleBtn(C.ok, "–", -12)
 local btnClose = mkCircleBtn(C.danger, "×", -38)
 
@@ -421,7 +449,6 @@ navList.FillDirection = Enum.FillDirection.Vertical
 navList.SortOrder = Enum.SortOrder.LayoutOrder
 navList.Padding = UDim.new(0, 2)
 navList.Parent = sidebar
-
 local navPad = Instance.new("UIPadding")
 navPad.PaddingTop = UDim.new(0, 8)
 navPad.PaddingLeft = UDim.new(0, 6)
@@ -457,7 +484,6 @@ do
     end)
 end
 
--- Tab-hold helpers (v2.1 — menu open holds Tab so game shows scoreboard)
 local _tabHeld = false
 local function holdTab()
     if _tabHeld then return end
@@ -539,16 +565,6 @@ local function mkCard(parent)
     return f
 end
 
-local function mkDivider(parent)
-    local f = Instance.new("Frame")
-    f.BackgroundColor3 = C.border
-    f.BackgroundTransparency = 0.9
-    f.BorderSizePixel = 0
-    f.Size = UDim2.new(1, 0, 0, 1)
-    f.Parent = parent
-    return f
-end
-
 local function mkToggle(parent, label, cfgKey, onToggle)
     local row = Instance.new("Frame")
     row.BackgroundTransparency = 1
@@ -581,18 +597,18 @@ local function mkToggle(parent, label, cfgKey, onToggle)
     knob.BorderSizePixel = 0
     knob.Parent = pill
     Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
-    local function apply(state)
+    local function applyVisual(state)
         pill.BackgroundColor3 = state and C.accent or C.card
         tw(knob, 0.12, {Position = state and UDim2.new(1, -19, 0.5, 0) or UDim2.new(0, 3, 0.5, 0)})
     end
     pill.MouseButton1Click:Connect(function()
         CFG[cfgKey] = not CFG[cfgKey]
-        apply(CFG[cfgKey])
+        applyVisual(CFG[cfgKey])
         if onToggle then onToggle(CFG[cfgKey]) end
     end)
     return function(state)
         CFG[cfgKey] = state
-        apply(state)
+        applyVisual(state)
         if onToggle then onToggle(state) end
     end
 end
@@ -729,8 +745,7 @@ local function mkDrop(parent, label, options, cfgKey, onChanged)
     btn.BackgroundColor3 = C.bg
     btn.BorderSizePixel = 0
     btn.Font = FONT_MED
-    btn.TextSize = 12
-    btn.TextColor3 = C.accent
+    btn.TextSize = 12    btn.TextColor3 = C.accent
     btn.Text = "▾  " .. tostring(CFG[cfgKey])
     btn.AutoButtonColor = false
     btn.Parent = row
@@ -757,7 +772,6 @@ local function mkDrop(parent, label, options, cfgKey, onChanged)
         ls.Parent = list
         local l = Instance.new("UIListLayout")
         l.SortOrder = Enum.SortOrder.LayoutOrder
-        l.Padding = UDim.new(0, 0)
         l.Parent = list
         for i, opt in ipairs(options) do
             local o = Instance.new("TextButton")
@@ -970,6 +984,41 @@ local function mkKeybind(parent, label, cfgKey)
     end)
 end
 
+local function mkInfoRow(parent, label, valueGetter)
+    local row = Instance.new("Frame")
+    row.BackgroundTransparency = 1
+    row.Size = UDim2.new(1, 0, 0, 28)
+    row.Parent = parent
+    local lbl = Instance.new("TextLabel")
+    lbl.BackgroundTransparency = 1
+    lbl.Size = UDim2.new(0.5, 0, 1, 0)
+    lbl.Font = FONT
+    lbl.TextSize = 13
+    lbl.TextColor3 = C.textMid
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Text = label
+    lbl.Parent = row
+    local val = Instance.new("TextLabel")
+    val.BackgroundTransparency = 1
+    val.AnchorPoint = Vector2.new(1, 0)
+    val.Position = UDim2.new(1, 0, 0, 0)
+    val.Size = UDim2.new(0.5, 0, 1, 0)
+    val.Font = FONT_MED
+    val.TextSize = 13
+    val.TextColor3 = C.accent
+    val.TextXAlignment = Enum.TextXAlignment.Right
+    val.Text = "..."
+    val.Parent = row
+    task.spawn(function()
+        while row.Parent do
+            local ok, v = pcall(valueGetter)
+            val.Text = ok and tostring(v) or "?"
+            task.wait(0.5)
+        end
+    end)
+    return row
+end
+
 local function mkScrollList(parent, items, onItemClick, height)
     local sf = Instance.new("ScrollingFrame")
     sf.BackgroundTransparency = 1
@@ -1011,7 +1060,7 @@ local function mkScrollList(parent, items, onItemClick, height)
         btn.Font = FONT_BOLD
         btn.TextSize = 11
         btn.TextColor3 = Color3.fromRGB(0, 0, 0)
-        btn.Text = "Get"
+        btn.Text = "Go"
         btn.AutoButtonColor = false
         btn.Parent = row
         Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
@@ -1022,45 +1071,8 @@ local function mkScrollList(parent, items, onItemClick, height)
     return sf
 end
 
-local function mkInfoRow(parent, label, valueGetter)
-    local row = Instance.new("Frame")
-    row.BackgroundTransparency = 1
-    row.Size = UDim2.new(1, 0, 0, 28)
-    row.Parent = parent
-    local lbl = Instance.new("TextLabel")
-    lbl.BackgroundTransparency = 1
-    lbl.Size = UDim2.new(0.5, 0, 1, 0)
-    lbl.Font = FONT
-    lbl.TextSize = 13
-    lbl.TextColor3 = C.textMid
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Text = label
-    lbl.Parent = row
-    local val = Instance.new("TextLabel")
-    val.BackgroundTransparency = 1
-    val.AnchorPoint = Vector2.new(1, 0)
-    val.Position = UDim2.new(1, 0, 0, 0)
-    val.Size = UDim2.new(0.5, 0, 1, 0)
-    val.Font = FONT_MED
-    val.TextSize = 13
-    val.TextColor3 = C.accent
-    val.TextXAlignment = Enum.TextXAlignment.Right
-    val.Text = "..."
-    val.Parent = row
-    task.spawn(function()
-        while row.Parent do
-            local ok, v = pcall(valueGetter)
-            val.Text = ok and tostring(v) or "?"
-            task.wait(0.5)
-        end
-    end)
-    return row
-end
-
 -- ============================================================================
--- SECTION 4B — TEAM SIGNATURE SYSTEM (v2.1 lift)
--- Resolves team identity from Team / attributes / child values / TeamColor.
--- Works on games where player.Team is empty but teams are visual.
+-- SECTION 4B — TEAM SIGNATURE SYSTEM
 -- ============================================================================
 local _teamCache = {}
 local _teamCacheTime = {}
@@ -1070,9 +1082,7 @@ local function normalizeTeamValue(value)
     if value == nil then return nil end
     local t = typeof(value)
     if t == "Instance" then return value end
-    if t == "Color3" then
-        return string.format("color:%.4f:%.4f:%.4f", value.R, value.G, value.B)
-    end
+    if t == "Color3" then return string.format("color:%.4f:%.4f:%.4f", value.R, value.G, value.B) end
     if t == "BrickColor" then return "brick:" .. value.Name end
     if t == "string" then return value == "" and nil or "string:" .. value end
     if t == "number" then return "number:" .. tostring(value) end
@@ -1083,12 +1093,8 @@ end
 local function isTeamName(name)
     if typeof(name) ~= "string" then return false end
     local lowered = string.gsub(string.lower(name), "[%s_%-]", "")
-    return lowered == "team"
-        or lowered == "teamid"
-        or lowered == "teamidentifier"
-        or lowered == "teamindex"
-        or lowered == "teamcolor"
-        or lowered == "teamcolour"
+    return lowered == "team" or lowered == "teamid" or lowered == "teamidentifier"
+        or lowered == "teamindex" or lowered == "teamcolor" or lowered == "teamcolour"
         or string.find(lowered, "teamid", 1, true) ~= nil
 end
 
@@ -1121,13 +1127,11 @@ end
 local function getTeamSignature(player)
     if not player then return nil end
     local now = os.clock()
-    if _teamCache[player] ~= nil
-    and _teamCacheTime[player]
+    if _teamCache[player] ~= nil and _teamCacheTime[player]
     and now - _teamCacheTime[player] < TEAM_CACHE_DURATION then
         return _teamCache[player]
     end
-    local signature =
-        player.Team
+    local signature = player.Team
         or getTeamFromAttributes(player)
         or getTeamFromValues(player)
         or (player.Character and getTeamFromAttributes(player.Character))
@@ -1160,36 +1164,30 @@ local function isTeammate(player)
     if not player or player == lp then return true end
     local ok1, lTeam = pcall(function() return lp.Team end)
     local ok2, pTeam = pcall(function() return player.Team end)
-    if ok1 and ok2 and lTeam and pTeam then
-        return lTeam == pTeam
-    end
+    if ok1 and ok2 and lTeam and pTeam then return lTeam == pTeam end
     local ls = getTeamSignature(lp)
     local ts = getTeamSignature(player)
     if ls ~= nil and ts ~= nil then
-        if typeof(ls) == "Instance" and typeof(ts) == "Instance" then
-            return ls == ts
-        end
+        if typeof(ls) == "Instance" and typeof(ts) == "Instance" then return ls == ts end
         return tostring(ls) == tostring(ts)
     end
     return false
 end
 
-local function isEnemy(player)
-    if not player or player == lp then return false end
-    return not isTeammate(player)
-end
-
 local function teamColor(p)
     local t = tostring(p.Team and p.Team.Name or ""):lower()
-    if t:find("guard") or t:find("police") or t:find("warden") or t:find("staff") then
+    if t:find("guard") or t:find("police") or t:find("warden") or t:find("staff")
+    or t:find("officer") or t:find("swat") or t:find("sheriff")
+    or t:find("department") or t:find("director") then
         return Color3.fromRGB(248, 113, 113)
-    elseif t:find("prisoner") or t:find("inmate") or t:find("criminal") then
+    elseif t:find("prisoner") or t:find("inmate") or t:find("criminal")
+    or t:find("escapee") or t:find("security") or t:find("civilian")
+    or t:find("patient") then
         return Color3.fromRGB(99, 179, 237)
     end
     return Color3.fromRGB(220, 220, 220)
 end
 
--- Wire cache invalidation
 Players.PlayerAdded:Connect(function(player)
     clearTeamCache(player)
     player:GetPropertyChangedSignal("Team"):Connect(function() clearTeamCache(player) end)
@@ -1206,18 +1204,14 @@ end
 Players.PlayerRemoving:Connect(function(player) clearTeamCache(player) end)
 
 -- ============================================================================
--- SECTION 4C — SHARED RAYCAST PARAMS (v2.1 lift)
--- One RaycastParams object, blacklist rebuilt on a 0.5s debounce or on player
--- join/leave. Rebuilding the blacklist per ray is the #1 perf sink in aimbot.
+-- SECTION 4C — SHARED RAYCAST PARAMS
 -- ============================================================================
 local _sharedRayParams = RaycastParams.new()
 _sharedRayParams.FilterType = Enum.RaycastFilterType.Exclude
 local _raycastBlacklistDirty = true
 local _raycastBlacklistTime = 0
 
-local function markRaycastDirty()
-    _raycastBlacklistDirty = true
-end
+local function markRaycastDirty() _raycastBlacklistDirty = true end
 Players.PlayerAdded:Connect(markRaycastDirty)
 Players.PlayerRemoving:Connect(markRaycastDirty)
 
@@ -1238,7 +1232,6 @@ local function getSharedRayParams(excludeChar)
     return _sharedRayParams
 end
 
--- LOS: camera to part. Returns true on raycast failure (defensive default).
 local function hasLineOfSight(targetPart)
     if not targetPart or not cam then return false end
     local parent = targetPart.Parent
@@ -1259,9 +1252,7 @@ local function hasLineOfSight(targetPart)
 end
 
 -- ============================================================================
--- SECTION 4D — 8-CORNER HITBOX SCREEN BOUNDS (v2.1 lift)
--- Projects all 8 corners of a part's world-space box to screen, returns the
--- axis-aligned bounding rect. Accurate for rotated characters.
+-- SECTION 4D — 8-CORNER HITBOX SCREEN BOUNDS
 -- ============================================================================
 local function getHitboxScreenBounds(part)
     if not cam or not part or not part.Parent then return nil end
@@ -1374,6 +1365,53 @@ for i, data in ipairs(PAGE_NAMES) do
 end
 
 -- ============================================================================
+-- DEX-INFORMED DATA
+-- ============================================================================
+local WEAPON_NAMES = {
+    "1911 Emperor", "92FS", "93R", "AA.50 Beowulf", "AK Bayonet", "AK-12", "AK-47", "AK-74",
+    "AMD-65", "AR-57", "AR2", "ARP", "Baton", "Beanbag Shotgun", "C8IUR (EXPS3-0)", "Cat gun",
+    "FNX45", "Five Seven", "G17", "G18", "G18C", "G22", "G36", "G36C", "G40", "GEN-12",
+    "Galil", "Giant17", "Godgun", "HK416", "HK416D", "Honey Badger", "KSG-12", "L1A1 SLR",
+    "M1014", "M134", "M16A1", "M16A4", "M1911A1", "M1928", "M1A1", "M249 SAW", "M3 Grease Gun",
+    "M4A1", "M82A1", "MCX Spear", "MGL MK1S", "MP40", "MP5", "MP7", "Makarov", "Model 590",
+    "P90", "PKSG-12", "PM82A1", "PUMP45", "Paintball Gun", "Paterson 1836", "Patriot",
+    "PepperBall Pistol", "PepperBall Rifle", "S550", "SA58 OSW", "SCAR-L", "SKS", "SR9",
+    "SW500", "Saiga 12K", "Scorpion E3", "Screwdriver", "Shiv", "TOZ-106", "TT-33 Tokarev",
+    "Terminator", "UMP45", "Ultimax100", "VSS Vintorez", "X26", "X5000",
+}
+
+local WEAPON_KEYWORDS = {
+    "gun", "pistol", "rifle", "shot", "snip", "smg", "revolver", "taser",
+    "mp5", "mp7", "ak", "m4", "g18", "g17", "glock", "ump", "p90", "scar",
+    "hk", "g36", "m16", "m1911", "saiga", "ksg", "m1014", "terminator",
+    "toz", "beowulf", "mcx", "harrow", "galil", "slr", "sa58", "sks", "vss",
+    "vintorez", "patriot", "ar2", "c8", "dmr", "sg550", "honey badger",
+    "ump45", "pump45", "scorpion", "se3", "m1928", "m1a1", "grease", "mp40",
+    "m249", "ultimax", "m82", "mgl", "tempest", "giant17", "godgun", "sw500",
+    "makarov", "92fs", "1911", "paterson", "pm82", "fnx", "five seven",
+    "pepperball", "paintball", "m134", "sr9", "tokarev", "x26", "x5000",
+    "baton", "bayonet",
+    "shiv", "screwdriver", "screw driver", "knife", "blade", "bat", "crowbar",
+    "wrench", "pipe", "hammer", "machete", "axe", "club", "stick",
+    "weapon", "melee", "tool",
+}
+
+local VALLEY_SPAWNS = {
+    "AssistantDirector", "Booking", "Civilian", "Cook",
+    "Correctional Emergency Response", "CorrectionalOfficer", "Director",
+    "Employee", "Escapee", "Janitor", "Maintenance", "Medical Staff",
+    "Riot Officer", "Sheriff's Office", "State Police",
+    "VCSO-SWAT", "VSP-SWAT", "WeaponsTester",
+}
+
+local VALLEY_TEAMS = {
+    "Booking", "Civilian", "DepartmentOfCorrections", "Escapee",
+    "MaximumSecurity", "MediumSecurity", "MentalPatient",
+    "MinimumSecurity", "Sheriff'sOffice", "StatePolice",
+    "VCSO-SWAT", "WeaponsTester",
+}
+
+-- ============================================================================
 -- 4.1 HOME
 -- ============================================================================
 do
@@ -1396,7 +1434,7 @@ do
     sub.TextSize = 12
     sub.TextColor3 = C.textDim
     sub.TextXAlignment = Enum.TextXAlignment.Left
-    sub.Text = "Valley Prison  ·  NyxScript  ·  v2.1"
+    sub.Text = "Valley Prison  ·  NyxScript  ·  v2.2"
     sub.Parent = c1
     local hint = Instance.new("TextLabel")
     hint.BackgroundTransparency = 1
@@ -1410,10 +1448,6 @@ do
 
     secLabel(pg, "Quick Status")
     local c2 = mkCard(pg)
-    mkInfoRow(c2, "Game", function()
-        local ok, info = pcall(function() return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name end)
-        return ok and info or "Valley Prison"
-    end)
     mkInfoRow(c2, "Players", function() return #Players:GetPlayers() end)
     mkInfoRow(c2, "FPS", function() return math.floor(1 / RunService.RenderStepped:Wait()) end)
     mkInfoRow(c2, "Ping", function() return math.floor(lp:GetNetworkPing() * 1000) .. " ms" end)
@@ -1428,12 +1462,12 @@ do
 
     secLabel(pg, "Quick Toggles")
     local c3 = mkCard(pg)
-    mkToggle(c3, "Player ESP", "PlayerESP", function(s) notify("Player ESP " .. (s and "ON" or "OFF"), s and "ok" or "info") end)
-    mkToggle(c3, "Aimbot", "Aimbot", function(s) notify("Aimbot " .. (s and "ON" or "OFF"), s and "ok" or "info") end)
-    mkToggle(c3, "Fly", "Fly", function(s) notify("Fly " .. (s and "ON" or "OFF"), s and "ok" or "info") end)
-    mkToggle(c3, "Speed Hack", "SpeedEnabled", function(s) notify("Speed Hack " .. (s and "ON" or "OFF"), s and "ok" or "info") end)
-    mkToggle(c3, "Infinite Stamina", "InfStamina", function(s) notify("Inf Stamina " .. (s and "ON" or "OFF"), s and "ok" or "info") end)
-    mkToggle(c3, "Anti-Kick", "AntiKick", function(s) notify("Anti-Kick " .. (s and "ON" or "OFF"), s and "ok" or "info") end)
+    mkToggle(c3, "Player ESP", "PlayerESP")
+    mkToggle(c3, "Aimbot", "Aimbot")
+    mkToggle(c3, "Fly", "Fly")
+    mkToggle(c3, "Speed Hack", "SpeedEnabled")
+    mkToggle(c3, "Infinite Stamina", "InfStamina")
+    mkToggle(c3, "Anti-Kick", "AntiKick")
 end
 
 -- ============================================================================
@@ -1443,21 +1477,43 @@ do
     local pg = PAGES.Combat
     secLabel(pg, "Aimbot")
     local c1 = mkCard(pg)
-    mkToggle(c1, "Aimbot ON/OFF", "Aimbot", function(s) notify("Aimbot " .. (s and "ON" or "OFF"), s and "ok" or "info") end)
+    mkToggle(c1, "Aimbot ON/OFF", "Aimbot")
     mkToggle(c1, "Aimlock (hard snap)", "Aimlock")
     mkToggle(c1, "FOV Ring", "AimbotFOVRing")
     mkColorPicker(c1, "FOV Ring Color", "AimbotFOVRingColor")
-    mkToggle(c1, "Require Weapon (shiv / screwdriver / gun)", "AimbotRequireGun")
-    mkToggle(c1, "Wall Check (skip targets behind walls)", "AimbotWallCheck")
-    mkToggle(c1, "Team Check (skip teammates)", "AimbotTeamCheck")
+    mkToggle(c1, "Require Weapon", "AimbotRequireGun")
+    mkToggle(c1, "Wall Check", "AimbotWallCheck")
+    mkToggle(c1, "Team Check", "AimbotTeamCheck")
+    mkToggle(c1, "Force Aiming flag (server-visible)", "AimbotForceAiming")
     mkSlider(c1, "FOV Radius (px)", "AimbotFOV", 30, 400, 5)
     mkSlider(c1, "Smooth (0.02 = snap, 1.0 = slow)", "AimbotSmooth", 0.02, 1.0, 0.01)
     mkDrop(c1, "Aim Part", {"Head", "HumanoidRootPart", "UpperTorso", "Torso", "RightUpperArm"}, "AimbotPart")
+    local aimInfo = Instance.new("TextLabel")
+    aimInfo.BackgroundTransparency = 1
+    aimInfo.Size = UDim2.new(1, 0, 0, 30)
+    aimInfo.Font = FONT
+    aimInfo.TextSize = 11
+    aimInfo.TextColor3 = C.textDim
+    aimInfo.TextXAlignment = Enum.TextXAlignment.Left
+    aimInfo.TextWrapped = true
+    aimInfo.Text = "Aimbot only fires when ON, a target is inside the FOV ring, and (if Require Weapon) you are holding a weapon. Camera writes are skipped when no target exists, so shift-lock stays intact."
+    aimInfo.Parent = c1
 
-    secLabel(pg, "Lock")
+    secLabel(pg, "Silent Aim")
     local c2 = mkCard(pg)
-    mkToggle(c2, "Aimlock — hard snap to target", "Aimlock")
-    mkToggle(c2, "Silent Aim — redirects projectiles", "SilentAim")
+    mkToggle(c2, "Silent Aim", "SilentAim")
+    mkToggle(c2, "Silent Aim Wall Check", "SilentAimWallCheck")
+    mkSlider(c2, "Silent Aim FOV (px, from cursor)", "SilentAimFOV", 30, 400, 5)
+    local saInfo = Instance.new("TextLabel")
+    saInfo.BackgroundTransparency = 1
+    saInfo.Size = UDim2.new(1, 0, 0, 30)
+    saInfo.Font = FONT
+    saInfo.TextSize = 11
+    saInfo.TextColor3 = C.textDim
+    saInfo.TextXAlignment = Enum.TextXAlignment.Left
+    saInfo.TextWrapped = true
+    saInfo.Text = "Redirects projectiles to the target nearest your cursor (or screen center if shift-locked). Independent of aimbot FOV. Enable only after confirming the fire remote accepts Vector3/BasePart args — otherwise leave off."
+    saInfo.Parent = c2
 
     secLabel(pg, "Triggerbot")
     local c3 = mkCard(pg)
@@ -1468,7 +1524,7 @@ do
     secLabel(pg, "Weapon Mods")
     local c4 = mkCard(pg)
     mkToggle(c4, "No Recoil", "NoRecoil")
-    mkToggle(c4, "No Spread / No Bloom", "NoSpread")
+    mkToggle(c4, "No Spread (ServerVariables.Cursor.Inaccuracy = 0)", "NoSpread")
     mkToggle(c4, "Rapid Fire", "RapidFire")
     mkToggle(c4, "Infinite Ammo", "InfiniteAmmo")
     mkToggle(c4, "Auto Reload", "AutoReload")
@@ -1478,16 +1534,6 @@ do
     local c5 = mkCard(pg)
     mkToggle(c5, "Hitbox Expand", "HitboxExpand")
     mkSlider(c5, "Hitbox Size (studs)", "HitboxSize", 1, 20, 0.5)
-    local hbInfo = Instance.new("TextLabel")
-    hbInfo.BackgroundTransparency = 1
-    hbInfo.Size = UDim2.new(1, 0, 0, 30)
-    hbInfo.Font = FONT
-    hbInfo.TextSize = 11
-    hbInfo.TextColor3 = C.textDim
-    hbInfo.TextXAlignment = Enum.TextXAlignment.Left
-    hbInfo.TextWrapped = true
-    hbInfo.Text = "Expands enemy head/torso collision size. Server-side weapons still check real hitbox."
-    hbInfo.Parent = c5
 end
 
 -- ============================================================================
@@ -1497,12 +1543,18 @@ do
     local pg = PAGES.ESP
     secLabel(pg, "Player ESP")
     local c1 = mkCard(pg)
-    mkToggle(c1, "Player Highlight", "PlayerESP", function(s) notify("Player ESP " .. (s and "ON" or "OFF"), s and "ok" or "info") end)
+    mkToggle(c1, "Player Highlight", "PlayerESP")
     mkToggle(c1, "Wallhack (always on top)", "WallHack")
+    mkToggle(c1, "Chams (second highlight, own color)", "ChamsESP")
+    mkColorPicker(c1, "Chams Color", "ChamsColor")
+    mkToggle(c1, "Skeleton (billboard lines)", "SkeletonESP")
+    mkColorPicker(c1, "Skeleton Color", "SkeletonColor")
     mkToggle(c1, "Box ESP", "BoxESP")
+    mkColorPicker(c1, "Box Color", "BoxESPColor")
     mkToggle(c1, "Tracer Lines", "TracerESP")
-    mkToggle(c1, "Skeleton ESP (billboard lines)", "SkeletonESP")
-    mkToggle(c1, "Chams (colored highlight)", "ChamsESP")
+    mkColorPicker(c1, "Tracer Color", "TracerColor")
+    mkDrop(c1, "Tracer Origin", {"Bottom", "Center", "Top", "Mouse"}, "TracerOrigin")
+    mkSlider(c1, "Tracer Thickness", "TracerThickness", 1, 4, 0.5)
     mkToggle(c1, "Team Colors", "TeamColors")
     mkSlider(c1, "Max Distance (studs)", "ESPMaxDist", 250, 1000, 25)
 
@@ -1518,16 +1570,6 @@ do
     mkSlider(c3, "Fill Transparency", "ESPFillTransparency", 0, 1, 0.05)
     mkColorPicker(c3, "Outline Color", "ESPOutlineColor")
     mkSlider(c3, "Outline Transparency", "ESPOutlineTransparency", 0, 1, 0.05)
-    mkColorPicker(c3, "Skeleton Color", "SkeletonColor")
-    mkColorPicker(c3, "Tracer Color", "TracerColor")
-    mkColorPicker(c3, "Box Color", "BoxESPColor")
-    mkDrop(c3, "Tracer Origin", {"Bottom", "Center", "Top", "Mouse"}, "TracerOrigin")
-
-    secLabel(pg, "Tracer Config")
-    local c4 = mkCard(pg)
-    mkToggle(c4, "Tracer ESP", "TracerESP")
-    mkSlider(c4, "Tracer Thickness", "TracerThickness", 1, 4, 0.5)
-    mkColorPicker(c4, "Tracer Color", "TracerColor")
 
     secLabel(pg, "World ESP")
     local c5 = mkCard(pg)
@@ -1535,6 +1577,7 @@ do
     mkToggle(c5, "Weapon ESP", "WeaponESP")
     mkToggle(c5, "Keycard ESP", "KeycardESP")
     mkSlider(c5, "Item Max Distance", "ItemESPMaxDist", 50, 500, 25)
+    mkSlider(c5, "Item Scan Interval (s)", "ItemESPInterval", 0.5, 3.0, 0.25)
 end
 
 -- ============================================================================
@@ -1554,12 +1597,12 @@ do
     sInfo.TextSize = 11
     sInfo.TextColor3 = C.textDim
     sInfo.TextXAlignment = Enum.TextXAlignment.Left
-    sInfo.Text = "Server resets WalkSpeed. Stepped keeps forcing it."
+    sInfo.Text = "Resets to 16 on toggle off. Server validates against ServerVariables.Sprint."
     sInfo.Parent = c1
 
     secLabel(pg, "Flight")
     local c2 = mkCard(pg)
-    mkToggle(c2, "Fly", "Fly", function(s) notify("Fly " .. (s and "ON" or "OFF"), s and "ok" or "info") end)
+    mkToggle(c2, "Fly", "Fly")
     mkSlider(c2, "Fly Speed", "FlySpeed", 5, 64, 1)
     mkDrop(c2, "Fly Mode", {"Head", "HRP", "CFrame"}, "FlyMode", function(v)
         if CFG.Fly then _G._VP_restartFly() end
@@ -1593,8 +1636,8 @@ do
     local c5 = mkCard(pg)
     mkToggle(c5, "Noclip", "Noclip")
     mkToggle(c5, "Infinite Stamina", "InfStamina")
-    mkToggle(c5, "Anti-Gravity Light (GravityInfluenceFactor)", "AntiStun")
-    mkToggle(c5, "Teleport to Cursor (hold key)", "TpToCursor")
+    mkToggle(c5, "Anti-Gravity Light", "AntiStun")
+    mkToggle(c5, "Teleport to Cursor", "TpToCursor")
     mkKeybind(c5, "TP Key", "TpToCursorKey")
 end
 
@@ -1605,7 +1648,9 @@ do
     local pg = PAGES.Visuals
     secLabel(pg, "Lighting")
     local c1 = mkCard(pg)
-    mkToggle(c1, "Fullbright", "Fullbright")
+    mkToggle(c1, "Fullbright", "Fullbright", function(s)
+        if not s and _G._VP_restoreLighting then _G._VP_restoreLighting() end
+    end)
     mkToggle(c1, "No Fog", "NoFog")
     mkBtn(c1, "Disable Bloom", function()
         for _, v in ipairs(Lighting:GetChildren()) do
@@ -1635,7 +1680,9 @@ do
     secLabel(pg, "Character")
     local c4 = mkCard(pg)
     mkToggle(c4, "Rainbow Character", "RainbowCharacter")
-    mkToggle(c4, "Invisible Character", "InvisibleCharacter")
+    mkToggle(c4, "Invisible Character", "InvisibleCharacter", function(s)
+        if not s and _G._VP_restoreCharTransparency then _G._VP_restoreCharTransparency() end
+    end)
     mkToggle(c4, "Custom Character Color", "CustomCharColor")
     mkColorPicker(c4, "Character Color", "CharColor")
 end
@@ -1645,15 +1692,9 @@ end
 -- ============================================================================
 do
     local pg = PAGES.Teleportation
-    secLabel(pg, "Locations")
+    secLabel(pg, "Spawn Points")
     local c1 = mkCard(pg)
-    local LOCATIONS = {
-        "Main Gate", "Guard Room", "Armory", "Cafeteria",
-        "Visitor Lobby", "Control Room", "Cell Block A", "Cell Block B",
-        "Warden's Office", "Medical Bay", "Courtyard", "Parking Lot",
-        "Evidence Room", "Prison Roof",
-    }
-    local function tpToLoc(name)
+    local function tpToSpawn(name)
         local target = nil
         for _, d in ipairs(workspace:GetDescendants()) do
             if d:IsA("BasePart") and d.Name:lower():find(name:lower(), 1, true) then
@@ -1668,19 +1709,19 @@ do
                 notify("TP → " .. name, "ok")
             end
         else
-            notify(name .. " — not found in world", "warn")
+            notify(name .. " — not found", "warn")
         end
     end
-    for _, locName in ipairs(LOCATIONS) do
-        mkBtn(c1, locName, function() tpToLoc(locName) end)
+    for _, spawnName in ipairs(VALLEY_SPAWNS) do
+        mkBtn(c1, spawnName, function() tpToSpawn(spawnName) end)
     end
 
     secLabel(pg, "Player Teleport")
     local c2 = mkCard(pg)
-    local tpListFrame = Instance.new("Frame")
-    tpListFrame.BackgroundTransparency = 1
-    tpListFrame.Size = UDim2.new(1, 0, 0, 140)
-    tpListFrame.Parent = c2
+    local tpFrame = Instance.new("Frame")
+    tpFrame.BackgroundTransparency = 1
+    tpFrame.Size = UDim2.new(1, 0, 0, 140)
+    tpFrame.Parent = c2
     local tpScroll = Instance.new("ScrollingFrame")
     tpScroll.BackgroundTransparency = 1
     tpScroll.BorderSizePixel = 0
@@ -1689,7 +1730,7 @@ do
     tpScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
     tpScroll.ScrollBarThickness = 3
     tpScroll.ScrollBarImageColor3 = C.accent
-    tpScroll.Parent = tpListFrame
+    tpScroll.Parent = tpFrame
     local tpL = Instance.new("UIListLayout")
     tpL.SortOrder = Enum.SortOrder.LayoutOrder
     tpL.Padding = UDim.new(0, 2)
@@ -1829,123 +1870,124 @@ do
         end
     end)
     rebuildSaved()
-
-    secLabel(pg, "Teleport to Cursor")
-    local c4 = mkCard(pg)
-    mkToggle(c4, "Enable TP-to-cursor (hold key)", "TpToCursor")
-    mkKeybind(c4, "TP Key", "TpToCursorKey")
-    local tInfo = Instance.new("TextLabel")
-    tInfo.BackgroundTransparency = 1
-    tInfo.Size = UDim2.new(1, 0, 0, 16)
-    tInfo.Font = FONT
-    tInfo.TextSize = 11
-    tInfo.TextColor3 = C.textDim
-    tInfo.TextXAlignment = Enum.TextXAlignment.Left
-    tInfo.Text = "Hold key, aim at ground, release to TP there"
-    tInfo.Parent = c4
 end
 
 -- ============================================================================
--- 4.7 SPAWNING
+-- 4.7 SPAWNING  — teleport-to-rack & interact
 -- ============================================================================
 do
     local pg = PAGES.Spawning
-    local function tryGive(name)
-        local src = nil
-        for _, d in ipairs(ReplicatedStorage:GetDescendants()) do
-            if d:IsA("Tool") and d.Name == name then src = d; break end
-        end
-        if not src then
-            for _, d in ipairs(workspace:GetDescendants()) do
-                if d:IsA("Tool") and d.Name == name then src = d; break end
+
+    -- Utility: find a rack for the given weapon name and interact with it
+    local function findWeaponRack(name)
+        local lower = name:lower()
+        for _, d in ipairs(workspace:GetDescendants()) do
+            if d:IsA("ProximityPrompt") then
+                local at = (d.ActionText or ""):lower()
+                local ot = (d.ObjectText or ""):lower()
+                if at:find(lower, 1, true) or ot:find(lower, 1, true) then
+                    return d, d.Parent
+                end
+            elseif d:IsA("ClickDetector") then
+                local parentName = d.Parent and d.Parent.Name or ""
+                if parentName:lower():find(lower, 1, true) then
+                    return d, d.Parent
+                end
+            elseif d:IsA("BasePart") and d.Name:lower() == lower then
+                -- bare weapon part on ground — check for prompt/click children
+                local prompt = d:FindFirstChildOfClass("ProximityPrompt")
+                local cd = d:FindFirstChildOfClass("ClickDetector")
+                if prompt or cd then return prompt or cd, d end
             end
         end
-        if src then
-            src:Clone().Parent = lp.Backpack
+        return nil, nil
+    end
+
+    local function interactWithRack(name)
+        local obj, rackPart = findWeaponRack(name)
+        if not obj then
+            notify(name .. " rack not found in world", "warn")
+            return false
+        end
+        local r = root(lp)
+        if not r then notify("No character", "err"); return false end
+        if rackPart and rackPart:IsA("BasePart") then
+            r.CFrame = rackPart.CFrame + Vector3.new(0, 3, 0)
+            task.wait(0.35)
+        end
+        if obj:IsA("ProximityPrompt") then
+            if not safeFireProximityPrompt(obj, 0) then
+                -- fallback: manual hold
+                pcall(function()
+                    obj:InputHoldBegin()
+                    task.wait(obj.HoldDuration or 0)
+                    obj:InputHoldEnd()
+                end)
+            end
+        elseif obj:IsA("ClickDetector") then
+            if not safeFireClickDetector(obj) then
+                pcall(function() fireclickdetector(obj, 0) end)
+            end
+        end
+        task.wait(0.4)
+        local got = false
+        for _, t in ipairs(lp.Backpack:GetChildren()) do
+            if t:IsA("Tool") and t.Name:lower():find(name:lower(), 1, true) then got = true; break end
+        end
+        if got then
             notify(name .. " → backpack", "ok")
+            return true
         else
-            notify(name .. " not in world yet", "warn")
+            notify(name .. " pickup failed (may need permission)", "warn")
+            return false
         end
     end
 
-    secLabel(pg, "Keycards")
+    secLabel(pg, "Weapon Pickup — Teleport & Grab")
     local c1 = mkCard(pg)
-    mkScrollList(c1, {
-        "Corrections Keycard", "Supervisors Keycard", "Directors Keycard",
-        "Employee Keycard", "Master Keycard", "Developer Keycard",
-    }, tryGive, 140)
+    local info = Instance.new("TextLabel")
+    info.BackgroundTransparency = 1
+    info.Size = UDim2.new(1, 0, 0, 30)
+    info.Font = FONT
+    info.TextSize = 11
+    info.TextColor3 = C.textDim
+    info.TextXAlignment = Enum.TextXAlignment.Left
+    info.TextWrapped = true
+    info.Text = "Searches the world for a weapon rack (ProximityPrompt, ClickDetector, or a matching part), teleports you to it, and fires the prompt. If the server permits the weapon for your role, it lands in your backpack. Server-side permission still applies — you can't pick up an armory gun as a prisoner."
+    info.Parent = c1
 
-    secLabel(pg, "Materials")
-    local c2 = mkCard(pg)
-    mkScrollList(c2, {"Metal", "Plastic", "Rope", "Shiv"}, tryGive, 90)
-
-    secLabel(pg, "Shotguns")
-    local c3 = mkCard(pg)
-    mkScrollList(c3, {
-        "KSG-12", "M1014", "Model 590", "Saiga 12K", "Terminator",
-        "Toz 106", "John's KSG", "PKSG-12", "GEN-12",
-    }, tryGive, 180)
-
-    secLabel(pg, "SMGs")
-    local c4 = mkCard(pg)
-    mkScrollList(c4, {
-        "M1928", "M1A1", "M3 Grease Gun", "MP40", "MP5",
-        "MP5 Mod", "MP7", "MP7 Mod", "Scorpion E3",
-        "SE3 Express", "UMP45", "UMP45-X", "P90", "PUMP45",
-    }, tryGive, 200)
-
-    secLabel(pg, "Assault Rifles")
-    local c5 = mkCard(pg)
-    mkScrollList(c5, {
-        "AMD-65", "AK-12", "AK-47", "AK-74", "AR-57",
-        "ARP", "M4A1", "HK416", "HK416 Patrol", "HK416D",
-        "G36", "G36C", "AA .50 Beowulf", "M16A4", "M16A1",
-        "SCAR-L", "LEO MCX Spear", "MCX Spear", "The Harrow", "IMI Galil",
-        "L1A1 SLR", "SA58 OSW-E", "SA58 OSW-L", "SA58 OSW", "SKS",
-        "VSS Vintorez", "Patriot", "AR2", "C8IUR", "Cat Gun",
-        "M4A1 DMR", "SG 550", "Honey Badger",
-    }, tryGive, 220)
-
-    secLabel(pg, "Pistols")
-    local c6 = mkCard(pg)
-    mkScrollList(c6, {
-        "92FS", "Makarov", "1911 Emperor", "SW500", "93R", "G18", "G18C",
-        "G17", "Arrow Fed G17", "Giant17", "Godgun", "Paterson 1836", "PM82A1",
-    }, tryGive, 200)
-
-    secLabel(pg, "Heavy / Special")
-    local c7 = mkCard(pg)
-    mkScrollList(c7, {"M82A1", "Ultimax 100", "M249 SAW", "Tempest", "MGL MK1S"}, tryGive, 130)
+    mkScrollList(c1, WEAPON_NAMES, interactWithRack, 240)
 
     secLabel(pg, "Backpack Actions")
-    local c8 = mkCard(pg)
-    mkBtn(c8, "Collect All Dropped Items", function()
+    local c2 = mkCard(pg)
+    mkBtn(c2, "Drop Held Tool on Ground", function()
+        local ch = chr(lp)
+        if not ch then return end
+        local tool = ch:FindFirstChildOfClass("Tool")
+        if not tool then notify("No tool equipped", "warn"); return end
+        local r = root(lp)
+        local handle = tool:FindFirstChild("Handle")
+        tool.Parent = workspace
+        if handle and r then
+            handle.CFrame = r.CFrame + r.CFrame.LookVector * 4 + Vector3.new(0, 1, 0)
+        end
+        notify("Dropped " .. tool.Name, "info")
+    end)
+    mkBtn(c2, "Collect All Dropped Items", function()
         local n = 0
         for _, d in ipairs(workspace:GetDescendants()) do
             if d:IsA("Tool") then d.Parent = lp.Backpack; n = n + 1 end
         end
         notify("Collected " .. n .. " items", "ok")
     end)
-    mkBtn(c8, "Drop All Items", function()
-        local r = root(lp)
-        local n = 0
-        for _, d in ipairs(lp.Backpack:GetChildren()) do
-            if d:IsA("Tool") then
-                d.Parent = workspace
-                if r and d:FindFirstChild("Handle") then d.Handle.CFrame = r.CFrame + Vector3.new(0, 2, 0) end
-                n = n + 1
-            end
-        end
-        notify("Dropped " .. n .. " items", "ok")
-    end)
-    mkBtn(c8, "Clear Backpack", function()
+    mkBtn(c2, "Clear Backpack", function()
         local n = 0
         for _, d in ipairs(lp.Backpack:GetChildren()) do
             if d:IsA("Tool") then d:Destroy(); n = n + 1 end
         end
         notify("Cleared " .. n .. " items", "ok")
     end)
-    mkInfoRow(c8, "Items in backpack", function()
+    mkInfoRow(c2, "Items in backpack", function()
         local n = 0
         for _, d in ipairs(lp.Backpack:GetChildren()) do
             if d:IsA("Tool") then n = n + 1 end
@@ -1959,151 +2001,100 @@ end
 -- ============================================================================
 do
     local pg = PAGES.Prison
-    secLabel(pg, "Bypasses")
+
+    local function getRemote(folderName, childName)
+        local folder = ReplicatedStorage:FindFirstChild("Remotes")
+        if not folder then return nil end
+        local sub = folder:FindFirstChild(folderName)
+        if not sub then return nil end
+        return sub:FindFirstChild(childName)
+    end
+
+    secLabel(pg, "Cuffs")
     local c1 = mkCard(pg)
-    mkBtn(c1, "Unlock Doors", function()
-        local n = 0
-        for _, d in ipairs(ReplicatedStorage:GetDescendants()) do
-            if d:IsA("RemoteEvent") then
-                local nm = d.Name:lower()
-                if nm:find("door") or nm:find("unlock") then
-                    pcall(function() d:FireServer() end)
-                    n = n + 1
-                end
-            end
-        end
-        notify("Fired " .. n .. " door remotes", "ok")
+    mkToggle(c1, "Auto-Escape Cuffs", "AutoEscapeCuffs")
+    mkBtn(c1, "Fire ReleaseTarget (one-shot)", function()
+        local r = getRemote("CuffsSystem", "ReleaseTarget")
+        if not r then notify("ReleaseTarget remote missing", "err"); return end
+        pcall(function()
+            r:FireServer(lp)
+        end)
+        pcall(function()
+            r:FireServer(lp.Character)
+        end)
+        pcall(function()
+            r:FireServer(lp.Name)
+        end)
+        notify("ReleaseTarget fired (3 arg shapes)", "info")
     end)
-    mkBtn(c1, "Remove Handcuffs", function()
+    mkBtn(c1, "Fire UnDetainTarget (one-shot)", function()
+        local r = getRemote("CuffsSystem", "UnDetainTarget")
+        if not r then notify("UnDetainTarget remote missing", "err"); return end
+        pcall(function() r:FireServer(lp) end)
+        pcall(function() r:FireServer(lp.Character) end)
+        notify("UnDetainTarget fired", "info")
+    end)
+    mkBtn(c1, "Break Cuff Welds", function()
         local ch = chr(lp)
         if not ch then return end
         local n = 0
         for _, d in ipairs(ch:GetDescendants()) do
-            if d:IsA("WeldConstraint") and d.Name:lower():find("cuff") then
-                d:Destroy(); n = n + 1
-            end
-        end
-        for _, d in ipairs(ReplicatedStorage:GetDescendants()) do
-            if d:IsA("RemoteEvent") then
-                local nm = d.Name:lower()
-                if nm:find("escape") or nm:find("uncuff") or nm:find("free") then
-                    pcall(function() d:FireServer() end)
+            if (d:IsA("WeldConstraint") or d:IsA("Weld")) then
+                local nm = (d.Name or ""):lower()
+                local parentNm = (d.Parent and d.Parent.Name or ""):lower()
+                if nm:find("cuff") or parentNm:find("cuff") then
+                    d:Destroy(); n = n + 1
                 end
             end
         end
-        notify("Removed " .. n .. " cuffs", "ok")
-    end)
-    mkBtn(c1, "Force Escape", function()
-        local ch = chr(lp)
-        if not ch then return end
-        for _, d in ipairs(ch:GetDescendants()) do
-            if d:IsA("WeldConstraint") or d:IsA("Weld") then d:Destroy() end
-        end
-        for _, d in ipairs(ReplicatedStorage:GetDescendants()) do
-            if d:IsA("RemoteEvent") then
-                local nm = d.Name:lower()
-                if nm:find("escape") or nm:find("free") then
-                    pcall(function() d:FireServer() end)
-                end
-            end
-        end
-        notify("Escape attempts fired", "warn")
-    end)
-    mkBtn(c1, "Cancel Arrest", function()
-        local n = 0
-        for _, d in ipairs(ReplicatedStorage:GetDescendants()) do
-            if d:IsA("RemoteEvent") then
-                local nm = d.Name:lower()
-                if nm:find("arrest") or nm:find("detain") then
-                    pcall(function() d:FireServer() end)
-                    n = n + 1
-                end
-            end
-        end
-        notify("Fired " .. n .. " arrest-cancel remotes", "ok")
+        notify("Broke " .. n .. " cuff welds", "ok")
     end)
 
-    secLabel(pg, "Team Switcher")
+    secLabel(pg, "Doors")
     local c2 = mkCard(pg)
-    local TEAMS_LIST = {"Prisoner", "Guard", "Warden", "Visitor", "Criminal", "Police", "Staff", "Inmate"}
-    for _, tn in ipairs(TEAMS_LIST) do
-        mkBtn(c2, tn, function()
-            local t = Teams:FindFirstChild(tn)
-            if t then
-                local ok = pcall(function() lp.Team = t end)
-                if ok then notify("Team → " .. tn, "ok") else notify("Team change blocked by server", "warn") end
-            else
-                notify("Team " .. tn .. " not found", "warn")
-            end
-            for _, d in ipairs(ReplicatedStorage:GetDescendants()) do
-                if d:IsA("RemoteEvent") then
-                    local nm = d.Name:lower()
-                    if nm:find("team") or nm:find("role") then
-                        pcall(function() d:FireServer(tn) end)
+    mkBtn(c2, "Open Nearby Doors", function()
+        local r = getRemote("Gate", "GateStatus")
+        if r then
+            pcall(function() r:FireServer() end)
+        end
+        -- Physical: disable CanCollide on any door part within 25 studs
+        local myRoot = root(lp)
+        if not myRoot then return end
+        local n = 0
+        for _, d in ipairs(workspace:GetDescendants()) do
+            if d:IsA("BasePart") then
+                local nm = (d.Name or ""):lower()
+                if (nm:find("door") or nm:find("gate")) then
+                    if (d.Position - myRoot.Position).Magnitude < 25 then
+                        d.CanCollide = false
+                        n = n + 1
                     end
                 end
             end
+        end
+        notify("Removed collision on " .. n .. " nearby doors (client)", "info")
+    end)
+
+    secLabel(pg, "Team Switcher")
+    local c3 = mkCard(pg)
+    for _, tn in ipairs(VALLEY_TEAMS) do
+        mkBtn(c3, tn, function()
+            local t = TeamsService:FindFirstChild(tn)
+            if t then
+                local ok = pcall(function() lp.Team = t end)
+                if ok then notify("Team → " .. tn, "ok") else notify("Team change blocked", "warn") end
+            else
+                notify("Team " .. tn .. " not found", "warn")
+            end
+            local r = getRemote("", "ChangeTeam")
+            if r then pcall(function() r:FireServer(tn) end) end
         end)
     end
-
-    secLabel(pg, "Player Actions")
-    local c3 = mkCard(pg)
-    local targetName = nil
-    mkDrop(c3, "Select Target", (function()
-        local t = {}
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= lp then table.insert(t, p.Name) end
-        end
-        if #t == 0 then t = {"(none)"} end
-        return t
-    end)(), "TargetName", function(v) targetName = v end)
-    mkBtn(c3, "Vote Kick Target", function()
-        if not targetName then return end
-        for _, d in ipairs(ReplicatedStorage:GetDescendants()) do
-            if d:IsA("RemoteEvent") then
-                local nm = d.Name:lower()
-                if nm:find("votekick") or nm:find("vote") then
-                    pcall(function() d:FireServer(targetName) end)
-                end
-            end
-        end
-        notify("Vote kick fired → " .. targetName, "ok")
-    end)
-    mkBtn(c3, "Report Target", function()
-        if not targetName then return end
-        for _, d in ipairs(ReplicatedStorage:GetDescendants()) do
-            if d:IsA("RemoteEvent") then
-                if d.Name:lower():find("report") then
-                    pcall(function() d:FireServer(targetName) end)
-                end
-            end
-        end
-        notify("Report fired → " .. targetName, "ok")
-    end)
-    mkBtn(c3, "Spectate Target", function()
-        if not targetName then return end
-        local p = Players:FindFirstChild(targetName)
-        local r = p and root(p)
-        if r then
-            cam.CameraSubject = r
-            notify("Spectating " .. targetName, "ok")
-        end
-    end)
-    mkBtn(c3, "Arrest Target", function()
-        if not targetName then return end
-        for _, d in ipairs(ReplicatedStorage:GetDescendants()) do
-            if d:IsA("RemoteEvent") then
-                if d.Name:lower():find("arrest") then
-                    pcall(function() d:FireServer(targetName) end)
-                end
-            end
-        end
-        notify("Arrest fired → " .. targetName, "ok")
-    end)
 
     secLabel(pg, "Remote Monitor")
     local c4 = mkCard(pg)
     mkToggle(c4, "Log All Remotes", "LogRemotes")
+    mkToggle(c4, "Log AC Traffic (1984 / when_will_you_learn / GetAC)", "LogACTraffic")
     mkToggle(c4, "Block Arrest Remotes", "BlockArrest")
     mkToggle(c4, "Block Ban/Kick Remotes", "BlockBan")
     mkBtn(c4, "List All Remotes", function()
@@ -2127,7 +2118,7 @@ do
                 end
             end
         end
-        notify("Found " .. n .. " suspect remotes", "info", 4)
+        notify("Found " .. n .. " suspects", "info", 4)
     end)
 end
 
@@ -2155,7 +2146,6 @@ do
     lL.SortOrder = Enum.SortOrder.LayoutOrder
     lL.Padding = UDim.new(0, 2)
     lL.Parent = listScroll
-
     local function rebuildPlayerList()
         for _, c in ipairs(listScroll:GetChildren()) do
             if c:IsA("Frame") then c:Destroy() end
@@ -2207,20 +2197,20 @@ do
             ping.TextXAlignment = Enum.TextXAlignment.Right
             ping.Text = math.floor(p:GetNetworkPing() * 1000) .. " ms"
             ping.Parent = row
-            local actionsBtn = Instance.new("TextButton")
-            actionsBtn.AnchorPoint = Vector2.new(1, 0.5)
-            actionsBtn.Position = UDim2.new(1, -8, 0.5, 8)
-            actionsBtn.Size = UDim2.fromOffset(50, 16)
-            actionsBtn.BackgroundColor3 = C.accent
-            actionsBtn.BorderSizePixel = 0
-            actionsBtn.Font = FONT_BOLD
-            actionsBtn.TextSize = 10
-            actionsBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
-            actionsBtn.Text = "TP"
-            actionsBtn.AutoButtonColor = false
-            actionsBtn.Parent = row
-            Instance.new("UICorner", actionsBtn).CornerRadius = UDim.new(0, 3)
-            actionsBtn.MouseButton1Click:Connect(function()
+            local tpBtn = Instance.new("TextButton")
+            tpBtn.AnchorPoint = Vector2.new(1, 0.5)
+            tpBtn.Position = UDim2.new(1, -8, 0.5, 8)
+            tpBtn.Size = UDim2.fromOffset(50, 16)
+            tpBtn.BackgroundColor3 = C.accent
+            tpBtn.BorderSizePixel = 0
+            tpBtn.Font = FONT_BOLD
+            tpBtn.TextSize = 10
+            tpBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+            tpBtn.Text = "TP"
+            tpBtn.AutoButtonColor = false
+            tpBtn.Parent = row
+            Instance.new("UICorner", tpBtn).CornerRadius = UDim.new(0, 3)
+            tpBtn.MouseButton1Click:Connect(function()
                 if p ~= lp then
                     local a, b = root(lp), root(p)
                     if a and b then a.CFrame = b.CFrame + Vector3.new(2, 0, 0); notify("TP → " .. p.Name, "ok") end
@@ -2251,6 +2241,19 @@ do
         local r = root(lp)
         return r and string.format("%.0f, %.0f, %.0f", r.Position.X, r.Position.Y, r.Position.Z) or "—"
     end)
+    mkInfoRow(c2, "Server HP", function()
+        local sv = lp:FindFirstChild("ServerVariables")
+        local sp = sv and sv:FindFirstChild("SpawnStats")
+        local hm = sp and sp:FindFirstChild("Humanoid")
+        local hp = hm and hm:FindFirstChild("Health")
+        return hp and tostring(hp.Value) or "—"
+    end)
+    mkInfoRow(c2, "Stamina", function()
+        local sv = lp:FindFirstChild("ServerVariables")
+        local sp = sv and sv:FindFirstChild("Sprint")
+        local st = sp and sp:FindFirstChild("Stamina")
+        return st and string.format("%.0f", st.Value) or "—"
+    end)
     mkInfoRow(c2, "Ping", function() return math.floor(lp:GetNetworkPing() * 1000) .. " ms" end)
     mkInfoRow(c2, "Account Age", function() return lp.AccountAge .. " days" end)
 end
@@ -2264,12 +2267,11 @@ do
     local c1 = mkCard(pg)
     mkKeybind(c1, "Menu Toggle Key", "MenuKey")
     mkToggle(c1, "Show Notifications", "ShowNotifications")
-    mkToggle(c1, "Menu Sounds", "MenuSounds")
-    mkBtn(c1, "Reset All Settings to Default", function()
+    mkBtn(c1, "Reset All Settings", function()
         for k, v in pairs(CFG) do
             if type(v) == "boolean" then CFG[k] = (k == "AntiKick") end
         end
-        notify("Settings reset (AntiKick on)", "warn")
+        notify("Settings reset", "warn")
     end)
 
     secLabel(pg, "Config")
@@ -2287,19 +2289,12 @@ do
         if not copied and type(toclipboard) == "function" then copied = pcall(toclipboard, json) end
         if copied then notify("Config copied", "ok") else print(json); notify("Copied to output", "info") end
     end)
-    mkBtn(c2, "Reset Config", function()
-        for k, v in pairs(CFG) do
-            if type(v) == "boolean" then CFG[k] = (k == "AntiKick") end
-        end
-        notify("Config reset", "warn")
-    end)
 
     secLabel(pg, "About")
     local c3 = mkCard(pg)
     mkInfoRow(c3, "Game", function() return "Valley Prison" end)
-    mkInfoRow(c3, "Script", function() return "NyxScript v2.1" end)
+    mkInfoRow(c3, "Script", function() return "NyxScript v2.2" end)
     mkInfoRow(c3, "Build", function() return os.date("%Y-%m-%d") end)
-    mkInfoRow(c3, "Toggle Key", function() return tostring(CFG.MenuKey):gsub("Enum.KeyCode.", "") end)
 end
 
 -- ============================================================================
@@ -2341,7 +2336,16 @@ do
                     notify("Ban remote blocked", "ok", 2)
                     return
                 end
-                if CFG.LogRemotes then
+                if CFG.LogACTraffic and (self.Name == "1984"
+                or tostring(self.Name):find("when_will_you_learn", 1, true)
+                or self.Name == "GetAC") then
+                    local parts = {}
+                    for i, v in ipairs({...}) do
+                        parts[#parts + 1] = string.format("arg%d=%s", i, typeof(v))
+                    end
+                    print("[AC-TRAFFIC]", m, self:GetFullName(), table.concat(parts, ", "))
+                end
+                if CFG.LogRemotes and not (self.Name == "1984" or self.Name == "GetAC") then
                     pcall(function() print(string.format("[VP Remote] %s → %s", m, self:GetFullName())) end)
                 end
             end
@@ -2351,20 +2355,6 @@ do
 end
 
 -- 5.2 WEAPON DETECTION
-local WEAPON_KEYWORDS = {
-    "gun", "pistol", "rifle", "shot", "snip", "smg", "revolver", "taser",
-    "mp5", "mp7", "ak", "m4", "g18", "g17", "glock", "ump", "p90", "scar",
-    "hk", "g36", "m16", "m1911", "saiga", "ksg", "m1014", "terminator",
-    "toz", "beowulf", "mcx", "harrow", "galil", "slr", "sa58", "sks", "vss",
-    "vintorez", "patriot", "ar2", "c8", "dmr", "sg550", "honey badger",
-    "ump45", "pump45", "scorpion", "se3", "m1928", "m1a1", "grease", "mp40",
-    "m249", "ultimax", "m82", "mgl", "tempest", "giant17", "godgun", "sw500",
-    "makarov", "92fs", "1911", "paterson", "pm82",
-    "shiv", "screwdriver", "screw driver", "knife", "blade", "bat", "crowbar",
-    "wrench", "pipe", "hammer", "machete", "axe", "club", "baton", "stick",
-    "weapon", "melee", "tool",
-}
-
 local function hasWeapon()
     local ch = chr(lp)
     if not ch then return false end
@@ -2385,8 +2375,8 @@ local function hasWeapon()
     return false
 end
 
--- 5.3 AIMBOT TARGET FINDER
-local function getBestTarget()
+-- 5.3 AIMBOT TARGET FINDER (camera center FOV)
+local function getBestTargetCamera()
     local vp = cam.ViewportSize
     local cx, cy = vp.X / 2, vp.Y / 2
     local candidates = {}
@@ -2398,10 +2388,7 @@ local function getBestTarget()
         local ch = chr(pl)
         local pt = ch and (ch:FindFirstChild(CFG.AimbotPart) or root(pl))
         if not pt then continue end
-        if CFG.AimbotWallCheck then
-            local me = root(lp)
-            if me and not hasLineOfSight(pt) then continue end
-        end
+        if CFG.AimbotWallCheck and not hasLineOfSight(pt) then continue end
         local sp, vis = cam:WorldToViewportPoint(pt.Position)
         if not vis or sp.Z < 0 then continue end
         local sd = math.sqrt((sp.X - cx) ^ 2 + (sp.Y - cy) ^ 2)
@@ -2414,12 +2401,50 @@ local function getBestTarget()
     return candidates[1].part
 end
 
--- 5.4 AIMBOT LOOP
+-- 5.4 AIMBOT TARGET FINDER (cursor FOV, for silent aim)
+local function getBestTargetCursor()
+    local mousePos = UserInputService:GetMouseLocation()
+    local mx, my = mousePos.X, mousePos.Y
+    if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+        local vp = cam.ViewportSize
+        mx, my = vp.X / 2, vp.Y / 2
+    end
+    local candidates = {}
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl == lp then continue end
+        if not isAlive(pl) then continue end
+        if isTeammate(pl) then continue end
+        local ch = chr(pl)
+        local pt = ch and (ch:FindFirstChild("Head") or root(pl))
+        if not pt then continue end
+        if CFG.SilentAimWallCheck and not hasLineOfSight(pt) then continue end
+        local sp, vis = cam:WorldToViewportPoint(pt.Position)
+        if not vis or sp.Z < 0 then continue end
+        local sd = math.sqrt((sp.X - mx) ^ 2 + (sp.Y - my) ^ 2)
+        if sd <= CFG.SilentAimFOV then
+            table.insert(candidates, {part = pt, sd = sd})
+        end
+    end
+    if #candidates == 0 then return nil end
+    table.sort(candidates, function(a, b) return a.sd < b.sd end)
+    return candidates[1].part
+end
+
+-- 5.5 AIMBOT CAMERA LOOP — shift-lock safe
 RunService:BindToRenderStep("VP_Aim", Enum.RenderPriority.Camera.Value + 1, function()
     if not (CFG.Aimbot or CFG.Aimlock) then return end
     if CFG.AimbotRequireGun and not hasWeapon() then return end
-    local t = getBestTarget()
-    if not t then return end
+    local t = getBestTargetCamera()
+    if not t then return end  -- no target -> don't touch camera -> shift-lock intact
+    if CFG.AimbotForceAiming then
+        local sv = lp:FindFirstChild("ServerVariables")
+        if sv then
+            local aiming = sv:FindFirstChild("Aiming")
+            if aiming and aiming:IsA("BoolValue") then
+                pcall(function() aiming.Value = true end)
+            end
+        end
+    end
     local goalCF = CFrame.new(cam.CFrame.Position, t.Position)
     if CFG.Aimlock then
         cam.CFrame = goalCF
@@ -2428,7 +2453,7 @@ RunService:BindToRenderStep("VP_Aim", Enum.RenderPriority.Camera.Value + 1, func
     end
 end)
 
--- 5.5 SILENT AIM HOOK
+-- 5.6 SILENT AIM HOOK
 local _saHooked = false
 local function hookSilentAim()
     if _saHooked then return end
@@ -2439,18 +2464,24 @@ local function hookSilentAim()
     mt.__namecall = safeNewCclosure(function(self, ...)
         local m = safeGetNamecallMethod()
         if CFG.SilentAim and (m == "FireServer" or m == "InvokeServer") then
-            local args = {...}
-            local t = getBestTarget()
-            if t then
-                for i, v in ipairs(args) do
-                    if typeof(v) == "Vector3" then
-                        args[i] = t.Position
-                    elseif typeof(v) == "Instance" and v:IsA("BasePart") then
-                        args[i] = t
+            local isWeaponFire = false
+            pcall(function()
+                isWeaponFire = self and self.Parent and self.Parent:IsA("Tool")
+            end)
+            if isWeaponFire then
+                local args = {...}
+                local t = getBestTargetCursor()
+                if t then
+                    for i, v in ipairs(args) do
+                        if typeof(v) == "Vector3" then
+                            args[i] = t.Position
+                        elseif typeof(v) == "Instance" and v:IsA("BasePart") then
+                            args[i] = t
+                        end
                     end
                 end
+                return old(self, table.unpack(args))
             end
-            return old(self, table.unpack(args))
         end
         return old(self, ...)
     end)
@@ -2462,16 +2493,42 @@ task.spawn(function()
     end
 end)
 
--- 5.6 ESP — HIGHLIGHTS + BILLBOARD TAGS
-local espHighlights = {}
-local tagFolder = Instance.new("Folder")
-tagFolder.Name = "VP_ESPTags"
-tagFolder.Parent = workspace
+-- 5.7 FOV RING (Drawing) — always centered, shows when Aimbot or Aimlock on
+local _fovRing = nil
+pcall(function()
+    if Drawing then
+        _fovRing = Drawing.new("Circle")
+        _fovRing.Thickness = 1.5
+        _fovRing.Filled = false
+        _fovRing.NumSides = 64
+        _fovRing.Transparency = 1
+        _fovRing.Color = CFG.AimbotFOVRingColor
+        _fovRing.Visible = false
+    end
+end)
+RunService.RenderStepped:Connect(function()
+    if not _fovRing then return end
+    local show = CFG.AimbotFOVRing and (CFG.Aimbot or CFG.Aimlock)
+    if show then
+        local vp = cam.ViewportSize
+        _fovRing.Position = Vector2.new(vp.X / 2, vp.Y / 2)
+        _fovRing.Radius = CFG.AimbotFOV
+        _fovRing.Color = CFG.AimbotFOVRingColor
+        _fovRing.Visible = true
+    else
+        _fovRing.Visible = false
+    end
+end)
 
+-- 5.8 ESP — HIGHLIGHTS
+local espHighlights = {}
+local chamsHighlights = {}
 local function buildESP(pl)
     if pl == lp then return end
     if espHighlights[pl] and espHighlights[pl].Parent then espHighlights[pl]:Destroy() end
     espHighlights[pl] = nil
+    if chamsHighlights[pl] and chamsHighlights[pl].Parent then chamsHighlights[pl]:Destroy() end
+    chamsHighlights[pl] = nil
     local ch = chr(pl)
     if not ch then
         pl.CharacterAdded:Connect(function() task.wait(0.2); buildESP(pl) end)
@@ -2488,7 +2545,54 @@ local function buildESP(pl)
     hl.Enabled = CFG.PlayerESP
     hl.Parent = ch
     espHighlights[pl] = hl
+
+    local ch2 = Instance.new("Highlight")
+    ch2.Name = "VP_Chams"
+    ch2.FillColor = CFG.ChamsColor
+    ch2.OutlineColor = CFG.ChamsColor
+    ch2.FillTransparency = 0.5
+    ch2.OutlineTransparency = 1
+    ch2.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    ch2.Adornee = ch
+    ch2.Enabled = CFG.ChamsESP
+    ch2.Parent = ch
+    chamsHighlights[pl] = ch2
 end
+
+local function refreshHighlights()
+    for pl, hl in pairs(espHighlights) do
+        if not pl.Parent then
+            if hl.Parent then hl:Destroy() end
+            espHighlights[pl] = nil
+            if chamsHighlights[pl] then
+                if chamsHighlights[pl].Parent then chamsHighlights[pl]:Destroy() end
+                chamsHighlights[pl] = nil
+            end
+        else
+            local d = dist(pl)
+            local within = d <= CFG.ESPMaxDist and isAlive(pl)
+            hl.Enabled = CFG.PlayerESP and within
+            if hl.Enabled then
+                hl.FillColor = CFG.TeamColors and teamColor(pl) or CFG.ESPFillColor
+                hl.OutlineColor = CFG.TeamColors and teamColor(pl) or CFG.ESPOutlineColor
+                hl.FillTransparency = CFG.ESPFillTransparency
+                hl.OutlineTransparency = CFG.ESPOutlineTransparency
+                hl.DepthMode = CFG.WallHack and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
+            end
+            local chl = chamsHighlights[pl]
+            if chl and chl.Parent then
+                chl.FillColor = CFG.ChamsColor
+                chl.OutlineColor = CFG.ChamsColor
+                chl.Enabled = CFG.ChamsESP and within
+            end
+        end
+    end
+end
+
+-- 5.9 BILLBOARD TAGS
+local tagFolder = Instance.new("Folder")
+tagFolder.Name = "VP_Tags"
+tagFolder.Parent = workspace
 
 local function buildTag(pl)
     if pl == lp then return end
@@ -2510,10 +2614,9 @@ local function buildTag(pl)
     nameLbl.Name = "NameLbl"
     nameLbl.BackgroundTransparency = 1
     nameLbl.Size = UDim2.new(1, 0, 0, 16)
-    nameLbl.Position = UDim2.new(0, 0, 0, 0)
     nameLbl.Font = FONT_BOLD
     nameLbl.TextSize = 13
-    nameLbl.TextColor3 = CFG.TeamColors and teamColor(pl) or C.text
+    nameLbl.TextColor3 = C.text
     nameLbl.TextStrokeTransparency = 0.4
     nameLbl.Text = pl.Name
     nameLbl.Parent = bb
@@ -2548,27 +2651,6 @@ local function buildTag(pl)
     Instance.new("UICorner", barFill).CornerRadius = UDim.new(1, 0)
 end
 
-local function refreshHighlights()
-    for pl, hl in pairs(espHighlights) do
-        if not pl.Parent then
-            if hl.Parent then hl:Destroy() end
-            espHighlights[pl] = nil
-        else
-            local d = dist(pl)
-            local active = (CFG.PlayerESP or CFG.ChamsESP) and d <= CFG.ESPMaxDist and isAlive(pl)
-            hl.Enabled = active
-            if active then
-                local baseColor = CFG.ChamsESP and CFG.ChamsColor or (CFG.TeamColors and teamColor(pl) or CFG.ESPFillColor)
-                hl.FillColor = baseColor
-                hl.OutlineColor = CFG.TeamColors and teamColor(pl) or CFG.ESPOutlineColor
-                hl.FillTransparency = CFG.ESPFillTransparency
-                hl.OutlineTransparency = CFG.ESPOutlineTransparency
-                hl.DepthMode = CFG.WallHack and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
-            end
-        end
-    end
-end
-
 local function updateBillboardTags()
     for _, bb in ipairs(tagFolder:GetChildren()) do
         local pl = Players:FindFirstChild(bb.Name)
@@ -2591,8 +2673,6 @@ local function updateBillboardTags()
             if infoLbl then
                 local parts = {}
                 if CFG.DistanceESP then table.insert(parts, string.format("%.0fm", d)) end
-                local tool = chr(pl) and chr(pl):FindFirstChildOfClass("Tool")
-                if tool then table.insert(parts, tool.Name) end
                 infoLbl.Text = table.concat(parts, "  ·  ")
                 infoLbl.Visible = #parts > 0
             end
@@ -2602,13 +2682,8 @@ local function updateBillboardTags()
                 if CFG.HealthESP and h then
                     local pct = math.clamp(h.Health / h.MaxHealth, 0, 1)
                     local r2, g2
-                    if pct > 0.5 then
-                        r2 = (1 - pct) * 2
-                        g2 = 1
-                    else
-                        r2 = 1
-                        g2 = pct * 2
-                    end
+                    if pct > 0.5 then r2 = (1 - pct) * 2; g2 = 1
+                    else r2 = 1; g2 = pct * 2 end
                     local fill = barBg:FindFirstChild("BarFill")
                     if fill then
                         fill.Size = UDim2.new(pct, 0, 1, 0)
@@ -2620,29 +2695,282 @@ local function updateBillboardTags()
     end
 end
 
--- 5.7 ITEM ESP
+-- 5.10 BOX ESP via BillboardGui (one frame per player)
+local boxFolder = Instance.new("Folder")
+boxFolder.Name = "VP_Boxes"
+boxFolder.Parent = workspace
+
+local function getBox(pl)
+    local existing = boxFolder:FindFirstChild(pl.Name)
+    if existing then return existing end
+    local r = root(pl)
+    if not r then return nil end
+    local bb = Instance.new("BillboardGui")
+    bb.Name = pl.Name
+    bb.Adornee = r
+    bb.Size = UDim2.new(0, 100, 0, 100)
+    bb.StudsOffset = Vector3.new(0, 0, 0)
+    bb.AlwaysOnTop = true
+    bb.Enabled = false
+    bb.Parent = boxFolder
+    local f = Instance.new("Frame")
+    f.Name = "BoxFrame"
+    f.BackgroundTransparency = 1
+    f.Size = UDim2.fromScale(1, 1)
+    f.Parent = bb
+    local stroke = Instance.new("UIStroke")
+    stroke.Name = "BoxStroke"
+    stroke.Color = CFG.BoxESPColor
+    stroke.Thickness = 1.5
+    stroke.Transparency = 0
+    stroke.Parent = f
+    return bb
+end
+
+local function updateBoxes()
+    for _, bb in ipairs(boxFolder:GetChildren()) do
+        local pl = Players:FindFirstChild(bb.Name)
+        if not pl or pl == lp or not CFG.BoxESP or not isAlive(pl) or dist(pl) > CFG.ESPMaxDist then
+            bb.Enabled = false
+            continue
+        end
+        local ch = chr(pl)
+        if not ch then bb.Enabled = false; continue end
+        -- Compute 8-corner bounding box across all BaseParts
+        local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+        local any = false
+        for _, part in ipairs(ch:GetChildren()) do
+            if part:IsA("BasePart") then
+                local a, b, c, d = getHitboxScreenBounds(part)
+                if a then
+                    any = true
+                    if a < minX then minX = a end
+                    if b < minY then minY = b end
+                    if c > maxX then maxX = c end
+                    if d > maxY then maxY = d end
+                end
+            end
+        end
+        if not any then bb.Enabled = false; continue end
+        local vp = cam.ViewportSize
+        local w = maxX - minX
+        local h = maxY - minY
+        local cx = (minX + maxX) / 2
+        local cy = (minY + maxY) / 2
+        bb.Size = UDim2.fromOffset(w, h)
+        bb.StudsOffsetWorldSpace = Vector3.new(0, 0, 0)
+        bb.Enabled = true
+        -- Position is handled by adornee + offset; billboard centers on adornee, so
+        -- a Frame sized to the projected box approximates well enough for on-screen
+        local f = bb:FindFirstChild("BoxFrame")
+        if f then
+            local stroke = f:FindFirstChild("BoxStroke")
+            if stroke then
+                stroke.Color = CFG.BoxESPColor
+                stroke.Thickness = 1.5
+            end
+        end
+    end
+end
+
+-- 5.11 TRACER ESP via ScreenGui frame
+local tracerGui = Instance.new("ScreenGui")
+tracerGui.Name = "VP_Tracers"
+tracerGui.ResetOnSpawn = false
+tracerGui.IgnoreGuiInset = true
+tracerGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+do
+    local hui = safeGetHui()
+    if hui then tracerGui.Parent = hui else tracerGui.Parent = lp:WaitForChild("PlayerGui") end
+end
+
+local tracers = {}
+local function getTracer(pl)
+    if tracers[pl] and tracers[pl].Parent then return tracers[pl] end
+    local f = Instance.new("Frame")
+    f.Name = "T_" .. pl.Name
+    f.AnchorPoint = Vector2.new(0.5, 0)
+    f.BackgroundColor3 = CFG.TracerColor
+    f.BorderSizePixel = 0
+    f.Size = UDim2.new(0, 1, 0, 1)
+    f.ZIndex = 999
+    f.Parent = tracerGui
+    tracers[pl] = f
+    return f
+end
+
+local function tracerOriginScreen()
+    local vp = cam.ViewportSize
+    if CFG.TracerOrigin == "Bottom" then return Vector2.new(vp.X / 2, vp.Y) end
+    if CFG.TracerOrigin == "Center" then return Vector2.new(vp.X / 2, vp.Y / 2) end
+    if CFG.TracerOrigin == "Top" then return Vector2.new(vp.X / 2, 0) end
+    if CFG.TracerOrigin == "Mouse" then
+        local mp = UserInputService:GetMouseLocation()
+        return Vector2.new(mp.X, mp.Y)
+    end
+    return Vector2.new(vp.X / 2, vp.Y)
+end
+
+local function updateTracers()
+    local seen = {}
+    if not CFG.TracerESP then
+        for _, f in pairs(tracers) do
+            if f.Parent then f.Visible = false end
+        end
+        return
+    end
+    local origin = tracerOriginScreen()
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl == lp then continue end
+        if isTeammate(pl) then continue end
+        if not isAlive(pl) then continue end
+        if dist(pl) > CFG.ESPMaxDist then continue end
+        local r = root(pl)
+        if not r then continue end
+        local sp, vis = cam:WorldToViewportPoint(r.Position)
+        if not vis or sp.Z < 0 then
+            local f = tracers[pl]
+            if f then f.Visible = false end
+            continue
+        end
+        local to = Vector2.new(sp.X, sp.Y)
+        local delta = to - origin
+        local length = delta.Magnitude
+        local angle = math.deg(math.atan2(delta.Y, delta.X)) + 90
+        local f = getTracer(pl)
+        f.Position = UDim2.fromOffset(origin.X, origin.Y)
+        f.Size = UDim2.fromOffset(CFG.TracerThickness, length)
+        f.Rotation = angle
+        f.BackgroundColor3 = CFG.TracerColor
+        f.Visible = true
+        seen[pl] = true
+    end
+    for pl, f in pairs(tracers) do
+        if not seen[pl] and f.Parent then f.Visible = false end
+        if not pl.Parent then f:Destroy(); tracers[pl] = nil end
+    end
+end
+
+-- 5.12 SKELETON ESP via BillboardGui lines
+local skeletonFolder = Instance.new("Folder")
+skeletonFolder.Name = "VP_Skeletons"
+skeletonFolder.Parent = workspace
+
+local BONES_R15 = {
+    {"Head","UpperTorso"},
+    {"UpperTorso","LowerTorso"},
+    {"UpperTorso","RightUpperArm"}, {"RightUpperArm","RightLowerArm"}, {"RightLowerArm","RightHand"},
+    {"UpperTorso","LeftUpperArm"},  {"LeftUpperArm","LeftLowerArm"},   {"LeftLowerArm","LeftHand"},
+    {"LowerTorso","RightUpperLeg"}, {"RightUpperLeg","RightLowerLeg"}, {"RightLowerLeg","RightFoot"},
+    {"LowerTorso","LeftUpperLeg"},  {"LeftUpperLeg","LeftLowerLeg"},   {"LeftLowerLeg","LeftFoot"},
+}
+local BONES_R6 = {
+    {"Head","Torso"},
+    {"Torso","Right Arm"}, {"Right Arm","Right Leg"},
+    {"Torso","Left Arm"},  {"Left Arm","Left Leg"},
+    {"Torso","Right Leg"}, {"Torso","Left Leg"},
+}
+
+local function getSkeleton(pl)
+    local existing = skeletonFolder:FindFirstChild(pl.Name)
+    if existing then return existing end
+    local ch = chr(pl)
+    if not ch then return nil end
+    local isR15 = ch:FindFirstChild("UpperTorso") ~= nil
+    local bones = isR15 and BONES_R15 or BONES_R6
+    local bb = Instance.new("BillboardGui")
+    bb.Name = pl.Name
+    bb.Adornee = root(pl) or ch:FindFirstChild("Torso") or ch:FindFirstChild("Head")
+    bb.Size = UDim2.new(0, 500, 0, 500)
+    bb.StudsOffset = Vector3.new(0, 0, 0)
+    bb.AlwaysOnTop = true
+    bb.Enabled = false
+    bb.Parent = skeletonFolder
+    for i, pair in ipairs(bones) do
+        local line = Instance.new("Frame")
+        line.Name = "bone_" .. i
+        line.AnchorPoint = Vector2.new(0.5, 0)
+        line.BackgroundColor3 = CFG.SkeletonColor
+        line.BorderSizePixel = 0
+        line.ZIndex = 2
+        line.Visible = false
+        line.Parent = bb
+    end
+    return bb
+end
+
+local function updateSkeletons()
+    for _, bb in ipairs(skeletonFolder:GetChildren()) do
+        local pl = Players:FindFirstChild(bb.Name)
+        if not pl or pl == lp or not CFG.SkeletonESP or isTeammate(pl) or not isAlive(pl) or dist(pl) > CFG.ESPMaxDist then
+            bb.Enabled = false
+            continue
+        end
+        local ch = chr(pl)
+        if not ch then bb.Enabled = false; continue end
+        local r = root(pl)
+        if r then bb.Adornee = r end
+        local isR15 = ch:FindFirstChild("UpperTorso") ~= nil
+        local bones = isR15 and BONES_R15 or BONES_R6
+        bb.Enabled = true
+        for i, pair in ipairs(bones) do
+            local line = bb:FindFirstChild("bone_" .. i)
+            if not line then break end
+            local a = ch:FindFirstChild(pair[1])
+            local b = ch:FindFirstChild(pair[2])
+            if a and b then
+                local sp1, v1 = cam:WorldToViewportPoint(a.Position)
+                local sp2, v2 = cam:WorldToViewportPoint(b.Position)
+                if v1 and v2 and sp1.Z > 0 and sp2.Z > 0 then
+                    local bbAbs = bb.AbsolutePosition
+                    local p1 = Vector2.new(sp1.X - bbAbs.X, sp1.Y - bbAbs.Y)
+                    local p2 = Vector2.new(sp2.X - bbAbs.X, sp2.Y - bbAbs.Y)
+                    local delta = p2 - p1
+                    local length = delta.Magnitude
+                    local angle = math.deg(math.atan2(delta.Y, delta.X)) + 90
+                    line.Position = UDim2.fromOffset(p1.X, p1.Y)
+                    line.Size = UDim2.fromOffset(1.5, length)
+                    line.Rotation = angle
+                    line.BackgroundColor3 = CFG.SkeletonColor
+                    line.Visible = true
+                else
+                    line.Visible = false
+                end
+            else
+                line.Visible = false
+            end
+        end
+    end
+end
+
+-- 5.13 ITEM ESP (perf-safe)
+local itemFolder = Instance.new("Folder")
+itemFolder.Name = "VP_Items"
+itemFolder.Parent = workspace
 local itemHighlights = {}
+
 local function refreshItemESP()
-    for inst, hl in pairs(itemHighlights) do
-        if not inst.Parent then
+    if not (CFG.ItemESP or CFG.WeaponESP or CFG.KeycardESP) then
+        for inst, hl in pairs(itemHighlights) do
             if hl.Parent then hl:Destroy() end
             itemHighlights[inst] = nil
         end
+        return
     end
-    if not (CFG.ItemESP or CFG.WeaponESP or CFG.KeycardESP) then return end
     local r = root(lp)
     if not r then return end
-    for _, d in ipairs(workspace:GetDescendants()) do
+    local tracked = {}
+    for _, d in ipairs(workspace:GetChildren()) do
         if d:IsA("Tool") and d:FindFirstChild("Handle") then
+            tracked[d] = true
             local nm = d.Name:lower()
-            local isKey = nm:find("keycard")
+            local isKey = nm:find("keycard") ~= nil
             local isWeapon = false
             for _, w in ipairs(WEAPON_KEYWORDS) do
                 if nm:find(w, 1, true) then isWeapon = true; break end
             end
-            local want = (CFG.ItemESP) or (CFG.WeaponESP and isWeapon) or (CFG.KeycardESP and isKey)
-            local p = d.Handle.Position
-            local within = (p - r.Position).Magnitude <= CFG.ItemESPMaxDist
+            local want = CFG.ItemESP or (CFG.WeaponESP and isWeapon) or (CFG.KeycardESP and isKey)
+            local within = (d.Handle.Position - r.Position).Magnitude <= CFG.ItemESPMaxDist
             if want and within then
                 if not itemHighlights[d] or not itemHighlights[d].Parent then
                     local hl = Instance.new("Highlight")
@@ -2662,9 +2990,17 @@ local function refreshItemESP()
             end
         end
     end
+    for inst, hl in pairs(itemHighlights) do
+        if not tracked[inst] or not inst.Parent then
+            if hl.Parent then hl:Destroy() end
+            itemHighlights[inst] = nil
+        end
+    end
 end
 
--- 5.8 FLY
+-- ============================================================================
+-- 5.14 FLY
+-- ============================================================================
 local _flyBV, _flyBG, _flyConn
 local function stopFly()
     if _flyConn then _flyConn:Disconnect(); _flyConn = nil end
@@ -2735,14 +3071,30 @@ local function startFly()
             end
         end)
     end
-    notify("Fly ON  ·  " .. mode .. "  ·  WASD + Space/Ctrl", "ok")
+    notify("Fly ON  ·  " .. mode, "ok")
 end
 
 _G._VP_restartFly = function()
-    if CFG.Fly then startFly() end
+    if CFG.Fly then startFly() else stopFly() end
 end
 
--- 5.9 NOCLIP
+-- React to ResetCharacterMass: reattach body movers if fly is on
+do
+    local r = ReplicatedStorage:FindFirstChild("Remotes")
+    local massReset = r and r:FindFirstChild("ResetCharacterMass")
+    if massReset then
+        massReset.OnClientEvent:Connect(function()
+            if CFG.Fly then
+                task.wait(0.1)
+                _G._VP_restartFly()
+            end
+        end)
+    end
+end
+
+-- ============================================================================
+-- 5.15 NOCLIP
+-- ============================================================================
 RunService.Stepped:Connect(function()
     if not CFG.Noclip then return end
     local ch = chr(lp)
@@ -2752,22 +3104,34 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- 5.10 SPEED + INF JUMP
+-- ============================================================================
+-- 5.16 SPEED + INF JUMP (with proper off-state)
+-- ============================================================================
 RunService.Stepped:Connect(function()
     local h = hum(lp)
     if not h then return end
-    if CFG.SpeedEnabled and h.WalkSpeed ~= CFG.Speed then h.WalkSpeed = CFG.Speed end
-    if CFG.InfJump and h.JumpPower ~= CFG.JumpPower then h.JumpPower = CFG.JumpPower end
+    if CFG.SpeedEnabled then
+        if h.WalkSpeed ~= CFG.Speed then h.WalkSpeed = CFG.Speed end
+    else
+        if h.WalkSpeed ~= 16 and h.WalkSpeed ~= 0 then h.WalkSpeed = 16 end
+    end
+    if CFG.InfJump then
+        if h.JumpPower ~= CFG.JumpPower then h.JumpPower = CFG.JumpPower end
+    end
 end)
 
--- 5.11 INFINITE JUMP
+-- ============================================================================
+-- 5.17 INFINITE JUMP
+-- ============================================================================
 UserInputService.JumpRequest:Connect(function()
     if not CFG.InfJump then return end
     local h = hum(lp)
     if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
 end)
 
--- 5.12 SUPER JUMP
+-- ============================================================================
+-- 5.18 SUPER JUMP
+-- ============================================================================
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.KeyCode == Enum.KeyCode.Space and CFG.SuperJump then
@@ -2781,7 +3145,9 @@ UserInputService.InputBegan:Connect(function(input, gp)
     end
 end)
 
--- 5.13 SLOW FALL
+-- ============================================================================
+-- 5.19 SLOW FALL
+-- ============================================================================
 RunService.Heartbeat:Connect(function()
     if not CFG.SlowFall then return end
     local h = hum(lp)
@@ -2792,7 +3158,9 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- 5.14 BUNNY HOP
+-- ============================================================================
+-- 5.20 BUNNY HOP
+-- ============================================================================
 RunService.Heartbeat:Connect(function()
     if not CFG.BunnyHop then return end
     local h = hum(lp)
@@ -2802,31 +3170,23 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- 5.15 INFINITE STAMINA
-local function findStamina()
-    for _, v in ipairs(lp:GetDescendants()) do
-        if (v:IsA("NumberValue") or v:IsA("IntValue")) and v.Name:lower():find("stam") then return v end
-    end
-    local ch = chr(lp)
-    if ch then
-        for _, v in ipairs(ch:GetDescendants()) do
-            if (v:IsA("NumberValue") or v:IsA("IntValue")) and v.Name:lower():find("stam") then return v end
-        end
-    end
-    local stats = lp:FindFirstChild("leaderstats") or lp:FindFirstChild("Stats")
-    if stats then
-        for _, v in ipairs(stats:GetChildren()) do
-            if v.Name:lower():find("stam") then return v end
-        end
-    end
-end
+-- ============================================================================
+-- 5.21 INFINITE STAMINA (fast path via ServerVariables.Sprint.Stamina)
+-- ============================================================================
 RunService.Heartbeat:Connect(function()
     if not CFG.InfStamina then return end
-    local sv = findStamina()
-    if sv then sv.Value = math.max(sv.Value, sv.Value > 1 and 100 or 1) end
+    local sv = lp:FindFirstChild("ServerVariables")
+    local sprint = sv and sv:FindFirstChild("Sprint")
+    local stam = sprint and sprint:FindFirstChild("Stamina")
+    local maxS = sprint and sprint:FindFirstChild("MaxStamina")
+    if stam and stam:IsA("NumberValue") then
+        stam.Value = maxS and maxS.Value or math.max(stam.Value, 100)
+    end
 end)
 
--- 5.16 HITBOX EXPANSION (virtualized — walks all BaseParts of enemy chars)
+-- ============================================================================
+-- 5.22 HITBOX EXPANSION (virtualized)
+-- ============================================================================
 local origSizes = {}
 RunService.Heartbeat:Connect(function()
     if not CFG.HitboxExpand then
@@ -2849,7 +3209,9 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- 5.17 GOD MODE
+-- ============================================================================
+-- 5.23 GOD MODE (client-side only — server authoritative)
+-- ============================================================================
 local _godConn
 local function hookGodMode(on)
     if _godConn then _godConn:Disconnect(); _godConn = nil end
@@ -2868,7 +3230,9 @@ RunService.Heartbeat:Connect(function()
     if h and h.Health < h.MaxHealth then h.Health = h.MaxHealth end
 end)
 
--- 5.18 TRIGGERBOT (8-corner hitbox bounds — fires only when crosshair is inside)
+-- ============================================================================
+-- 5.24 TRIGGERBOT (8-corner bounds)
+-- ============================================================================
 _G._VP_lastTrig = 0
 RunService.Heartbeat:Connect(function()
     if not CFG.Triggerbot then return end
@@ -2905,9 +3269,32 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- 5.19 FULLBRIGHT / NO FOG / TIME
+-- ============================================================================
+-- 5.25 NO SPREAD (ServerVariables.Cursor.Inaccuracy)
+-- ============================================================================
+RunService.Heartbeat:Connect(function()
+    if not CFG.NoSpread then return end
+    local sv = lp:FindFirstChild("ServerVariables")
+    local cur = sv and sv:FindFirstChild("Cursor")
+    local inacc = cur and cur:FindFirstChild("Inaccuracy")
+    if inacc and inacc:IsA("NumberValue") and inacc.Value > 0 then
+        inacc.Value = 0
+    end
+end)
+
+-- ============================================================================
+-- 5.26 FULLBRIGHT (with explicit restore callback)
+-- ============================================================================
 local _origLighting = {}
 local _fbApplied = false
+_G._VP_restoreLighting = function()
+    if not _fbApplied then return end
+    for k, v in pairs(_origLighting) do Lighting[k] = v end
+    for _, v in ipairs(Lighting:GetChildren()) do
+        if v:IsA("Atmosphere") or v:IsA("BlurEffect") then v.Enabled = true end
+    end
+    _fbApplied = false
+end
 RunService.Heartbeat:Connect(function()
     if CFG.Fullbright and not _fbApplied then
         _origLighting.Brightness = Lighting.Brightness
@@ -2922,27 +3309,21 @@ RunService.Heartbeat:Connect(function()
             if v:IsA("Atmosphere") or v:IsA("BlurEffect") then v.Enabled = false end
         end
         _fbApplied = true
-    elseif not CFG.Fullbright and _fbApplied then
-        for k, v in pairs(_origLighting) do Lighting[k] = v end
-        for _, v in ipairs(Lighting:GetChildren()) do
-            if v:IsA("Atmosphere") or v:IsA("BlurEffect") then v.Enabled = true end
-        end
-        _fbApplied = false
     end
     if CFG.NoFog then
         Lighting.FogEnd = 100000
         Lighting.FogStart = 99999
-        for _, v in ipairs(Lighting:GetChildren()) do
-            if v:IsA("Atmosphere") then v.Enabled = false end
-        end
     end
     if CFG.TimeOfDay then Lighting.ClockTime = CFG.TimeValue end
 end)
 
--- 5.20 THIRD PERSON
+-- ============================================================================
+-- 5.27 THIRD PERSON
+-- ============================================================================
 local _tpConn
-local function startThirdPerson()
-    if _tpConn then _tpConn:Disconnect() end
+RunService.RenderStepped:Connect(function()
+    if not CFG.ThirdPerson then return end
+    if _tpConn then return end
     cam.CameraType = Enum.CameraType.Scriptable
     _tpConn = RunService.RenderStepped:Connect(function()
         if not CFG.ThirdPerson then
@@ -2956,14 +3337,25 @@ local function startThirdPerson()
         local camPos = r.Position - r.CFrame.LookVector * d + Vector3.new(0, d * 0.4, 0)
         cam.CFrame = CFrame.new(camPos, r.Position + Vector3.new(0, 1.5, 0))
     end)
-end
+end)
 
--- 5.21 ZOOM
+-- ============================================================================
+-- 5.28 ZOOM
+-- ============================================================================
 RunService.RenderStepped:Connect(function()
     if CFG.ZoomHack then cam.FieldOfView = CFG.ZoomFOV end
 end)
 
--- 5.22 RAINBOW / INVIS / CUSTOM COLOR
+-- ============================================================================
+-- 5.29 RAINBOW / INVIS / CUSTOM CHAR COLOR (with restore)
+-- ============================================================================
+_G._VP_restoreCharTransparency = function()
+    local ch = chr(lp)
+    if not ch then return end
+    for _, p in ipairs(ch:GetDescendants()) do
+        if p:IsA("BasePart") then p.LocalTransparencyModifier = 0 end
+    end
+end
 RunService.RenderStepped:Connect(function()
     local ch = chr(lp)
     if not ch then return end
@@ -2986,7 +3378,9 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- 5.23 TP TO CURSOR
+-- ============================================================================
+-- 5.30 TP TO CURSOR
+-- ============================================================================
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
     if not CFG.TpToCursor then return end
@@ -3002,10 +3396,55 @@ UserInputService.InputBegan:Connect(function(input, gp)
     end
 end)
 
--- 5.24 ANTI-GRAVITY
+-- ============================================================================
+-- 5.31 ANTI-GRAVITY
+-- ============================================================================
 RunService.Heartbeat:Connect(function()
     if CFG.AntiGravity and workspace.Gravity ~= CFG.GravityValue then
         workspace.Gravity = CFG.GravityValue
+    end
+end)
+
+-- ============================================================================
+-- 5.32 CUFF AUTO-ESCAPE
+-- ============================================================================
+local _cuffConn
+task.spawn(function()
+    while true do
+        task.wait(1.0)
+        if _cuffConn then _cuffConn:Disconnect(); _cuffConn = nil end
+        if not CFG.AutoEscapeCuffs then
+            -- idle
+        else
+            _cuffConn = RunService.Heartbeat:Connect(function()
+                local sv = lp:FindFirstChild("ServerVariables")
+                local hc = sv and sv:FindFirstChild("Handcuffs")
+                local cuffed = hc and hc:FindFirstChild("Cuffed")
+                if cuffed and cuffed:IsA("BoolValue") and cuffed.Value then
+                    -- break welds on character
+                    local ch = chr(lp)
+                    if ch then
+                        for _, d in ipairs(ch:GetDescendants()) do
+                            if d:IsA("WeldConstraint") or d:IsA("Weld") then
+                                local nm = (d.Name or ""):lower()
+                                local parentNm = (d.Parent and d.Parent.Name or ""):lower()
+                                if nm:find("cuff") or parentNm:find("cuff") then
+                                    pcall(function() d:Destroy() end)
+                                end
+                            end
+                        end
+                    end
+                    -- fire release remote
+                    local r = ReplicatedStorage:FindFirstChild("Remotes")
+                    local cs = r and r:FindFirstChild("CuffsSystem")
+                    local release = cs and cs:FindFirstChild("ReleaseTarget")
+                    if release then
+                        pcall(function() release:FireServer(lp) end)
+                    end
+                end
+            end)
+            task.wait(2.0)
+        end
     end
 end)
 
@@ -3022,9 +3461,11 @@ lp.CharacterAdded:Connect(function()
         if pl ~= lp then
             buildESP(pl)
             buildTag(pl)
+            getSkeleton(pl)
+            getBox(pl)
         end
     end
-    notify("Respawned — cheats reapplied", "info")
+    notify("Respawned", "info")
 end)
 
 Players.PlayerAdded:Connect(function(pl)
@@ -3032,9 +3473,13 @@ Players.PlayerAdded:Connect(function(pl)
         task.wait(0.3)
         buildESP(pl)
         buildTag(pl)
+        getSkeleton(pl)
+        getBox(pl)
     end)
     buildESP(pl)
     buildTag(pl)
+    getSkeleton(pl)
+    getBox(pl)
 end)
 
 Players.PlayerRemoving:Connect(function(pl)
@@ -3042,8 +3487,17 @@ Players.PlayerRemoving:Connect(function(pl)
         if espHighlights[pl].Parent then espHighlights[pl]:Destroy() end
         espHighlights[pl] = nil
     end
+    if chamsHighlights[pl] then
+        if chamsHighlights[pl].Parent then chamsHighlights[pl]:Destroy() end
+        chamsHighlights[pl] = nil
+    end
     local bb = tagFolder:FindFirstChild(pl.Name)
     if bb then bb:Destroy() end
+    local sk = skeletonFolder:FindFirstChild(pl.Name)
+    if sk then sk:Destroy() end
+    local bx = boxFolder:FindFirstChild(pl.Name)
+    if bx then bx:Destroy() end
+    if tracers[pl] then tracers[pl]:Destroy(); tracers[pl] = nil end
     for pt, _ in pairs(origSizes) do
         if not pt.Parent then origSizes[pt] = nil end
     end
@@ -3053,17 +3507,22 @@ for _, pl in ipairs(Players:GetPlayers()) do
     if pl ~= lp then
         buildESP(pl)
         buildTag(pl)
+        getSkeleton(pl)
+        getBox(pl)
     end
 end
 
 -- ============================================================================
--- SECTION 6 — MAIN RENDER LOOP (frame-locked ESP timers)
+-- SECTION 6 — MAIN RENDER LOOP
 -- ============================================================================
-local timers = {esp = 0, tags = 0, items = 0}
+local timers = {esp = 0, tags = 0, items = 0, box = 0, skel = 0, tracer = 0}
 RunService.RenderStepped:Connect(function(dt)
     timers.esp = timers.esp + dt
     timers.tags = timers.tags + dt
     timers.items = timers.items + dt
+    timers.box = timers.box + dt
+    timers.skel = timers.skel + dt
+    timers.tracer = timers.tracer + dt
     if timers.esp >= 0.18 then
         timers.esp = 0
         refreshHighlights()
@@ -3072,14 +3531,26 @@ RunService.RenderStepped:Connect(function(dt)
         timers.tags = 0
         updateBillboardTags()
     end
-    if timers.items >= 0.25 then
+    if timers.items >= CFG.ItemESPInterval then
         timers.items = 0
         refreshItemESP()
+    end
+    if timers.box >= 0.05 then
+        timers.box = 0
+        updateBoxes()
+    end
+    if timers.skel >= 0.05 then
+        timers.skel = 0
+        updateSkeletons()
+    end
+    if timers.tracer >= 0.02 then
+        timers.tracer = 0
+        updateTracers()
     end
 end)
 
 -- ============================================================================
--- MENU TOGGLE (Right Shift) — holds Tab while open
+-- MENU TOGGLE
 -- ============================================================================
 UserInputService.InputBegan:Connect(function(input, gp)
     if input.KeyCode ~= CFG.MenuKey then return end
@@ -3104,5 +3575,5 @@ end)
 -- SECTION 9 — INIT
 -- ============================================================================
 setPage("Home")
-notify("NyxScript v2.1 loaded  ·  Anti-Kick active", "ok", 5)
-print("[NyxScript v2.1] Valley Prison loaded. Right Shift = toggle menu.")
+notify("NyxScript v2.2 loaded  ·  Anti-Kick active", "ok", 5)
+print("[NyxScript v2.2] Valley Prison loaded. Right Shift = toggle menu.")
