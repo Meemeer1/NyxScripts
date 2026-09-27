@@ -1,4 +1,4 @@
--- language: Lua (Luau), file: nyxscript_vp_js2.lua
+-- language: Lua (Luau), file: nyxscript_vp_js3.lua
 -- target: JJSploit / low-tier executors. No metatable hooks, no Drawing, no gethui.
 -- load: paste into JJSploit, run.
 
@@ -45,28 +45,35 @@ end
 -- ============================================================================
 
 local CFG = {
+    -- aimbot
     Aimbot=false, AimbotFOV=150, AimbotSmooth=0.15, AimbotPart="Head",
     AimbotTeamCheck=false, AimbotRequireGun=false, AimbotWallCheck=false,
+    AimbotMaxDist=500,
     AimbotFOVRing=true, AimbotFOVRingColor=Color3.fromRGB(0,255,170),
     Aimlock=false, Triggerbot=false, TriggerbotDelay=0.05,
     HitboxExpand=false, HitboxSize=6,
-    PlayerESP=false, ESPFillColor=Color3.fromRGB(99,179,237),
+    -- esp
+    PlayerESP=false,
+    ESPFillColor=Color3.fromRGB(99,179,237),
     ESPOutlineColor=Color3.fromRGB(99,179,237),
-    ESPFillTransparency=0.75, ESPOutlineTransparency=0,
-    WallHack=false, TeamColors=true, ESPMaxDist=500,
+    ESPFillTransparency=0.35, ESPOutlineTransparency=0,
+    TeamColors=true, ESPMaxDist=500,
     ChamsESP=false, ChamsColor=Color3.fromRGB(255,165,0),
     NameESP=false, HealthESP=false, DistanceESP=false,
+    ItemESP=false, ItemMaxDist=150,
+    -- movement
     SpeedEnabled=false, Speed=24,
     Fly=false, FlySpeed=30,
     Noclip=false, InfJump=false, JumpPower=60,
     InfStamina=false, AntiGravity=false, GravityValue=50,
     BunnyHop=false, SlowFall=false, SlowFallSpeed=5,
     GodMode=false, TpToCursor=false,
+    -- visuals
     Fullbright=false, TimeOfDay=false, TimeValue=14,
     ThirdPerson=false, ThirdPersonDist=10,
     ZoomHack=false, ZoomFOV=70,
     Rainbow=false, InvisibleChar=false,
-    AntiKick=true,
+    -- gui
     Open=true, MenuKey=Enum.KeyCode.RightShift, ShowNotify=true,
 }
 
@@ -108,7 +115,6 @@ local NOTIFY_COLORS = { ok=C.ok, warn=C.warn, err=C.danger, info=C.accent }
 local function notify(msg, kind, dur)
     if not CFG.ShowNotify then return end
     kind = kind or "info"; dur = dur or 3
-
     local card = Instance.new("Frame")
     card.Size = UDim2.new(0, 260, 0, 44)
     card.BackgroundColor3 = C.bg
@@ -216,7 +222,7 @@ subLbl.Font = Enum.Font.Gotham
 subLbl.TextSize = 10
 subLbl.TextColor3 = C.textDim
 subLbl.TextXAlignment = Enum.TextXAlignment.Left
-subLbl.Text = "NyxScript v2.0-JS"
+subLbl.Text = "NyxScript v2.1-JS"
 subLbl.Parent = titleBar
 
 local function mkTitleBtn(txt, color, xOff)
@@ -230,6 +236,7 @@ local function mkTitleBtn(txt, color, xOff)
     b.TextSize = 14
     b.TextColor3 = C.bg
     b.AutoButtonColor = false
+    b.ZIndex = 5
     b.Parent = titleBar
     local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(1, 0); c.Parent = b
     return b
@@ -321,6 +328,7 @@ local function mkCard(parent)
     return c
 end
 
+-- TOGGLE — pill + knob, no hit-eaten by labels
 local function mkToggle(parent, label, cfgKey, onToggle)
     local row = Instance.new("Frame")
     row.BackgroundTransparency = 1
@@ -344,6 +352,7 @@ local function mkToggle(parent, label, cfgKey, onToggle)
     pill.BorderSizePixel = 0
     pill.Text = ""
     pill.AutoButtonColor = false
+    pill.ZIndex = 2
     pill.Parent = row
     local pcr = Instance.new("UICorner"); pcr.CornerRadius = UDim.new(1, 0); pcr.Parent = pill
 
@@ -352,6 +361,7 @@ local function mkToggle(parent, label, cfgKey, onToggle)
     knob.Position = CFG[cfgKey] and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
     knob.BackgroundColor3 = Color3.fromRGB(255,255,255)
     knob.BorderSizePixel = 0
+    knob.ZIndex = 3
     knob.Parent = pill
     local kcr = Instance.new("UICorner"); kcr.CornerRadius = UDim.new(1, 0); kcr.Parent = knob
 
@@ -371,6 +381,7 @@ local function mkToggle(parent, label, cfgKey, onToggle)
     pill.MouseButton1Click:Connect(function() set(not state) end)
 end
 
+-- SLIDER — drag anywhere on track
 local function mkSlider(parent, label, cfgKey, min, max, step, onChanged)
     local outer = Instance.new("Frame")
     outer.BackgroundTransparency = 1
@@ -448,13 +459,16 @@ local function mkSlider(parent, label, cfgKey, min, max, step, onChanged)
         if onChanged then pcall(onChanged, snapped) end
     end
 
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, 0, 1, 0)
-    btn.BackgroundTransparency = 1
-    btn.Text = ""
-    btn.Parent = outer
+    -- Whole-outer captures clicks so the slider is easy to grab
+    local hit = Instance.new("TextButton")
+    hit.Size = UDim2.new(1, 0, 0, 22)
+    hit.Position = UDim2.new(0, 0, 0, 22)
+    hit.BackgroundTransparency = 1
+    hit.Text = ""
+    hit.ZIndex = 5
+    hit.Parent = outer
 
-    btn.InputBegan:Connect(function(inp)
+    hit.InputBegan:Connect(function(inp)
         if inp.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
             applyInput(inp.Position.X)
@@ -480,6 +494,7 @@ local function mkBtn(parent, label, fn)
     b.TextSize = 12
     b.TextColor3 = C.textMid
     b.AutoButtonColor = false
+    b.ZIndex = 2
     b.Parent = parent
     local cr = Instance.new("UICorner"); cr.CornerRadius = UDim.new(0, 6); cr.Parent = b
     local st = Instance.new("UIStroke"); st.Color = C.border; st.Transparency = 0.92; st.Thickness = 1; st.Parent = b
@@ -487,6 +502,218 @@ local function mkBtn(parent, label, fn)
     b.MouseEnter:Connect(function() tw(b, 0.08, { BackgroundColor3 = C.cardHov }) end)
     b.MouseLeave:Connect(function() tw(b, 0.08, { BackgroundColor3 = C.card }) end)
     b.MouseButton1Click:Connect(function() if fn then pcall(fn) end end)
+end
+
+local function mkDrop(parent, label, options, cfgKey, onChanged)
+    local row = Instance.new("Frame")
+    row.BackgroundTransparency = 1
+    row.Size = UDim2.new(1, 0, 0, 30)
+    row.Parent = parent
+    local lbl = Instance.new("TextLabel")
+    lbl.BackgroundTransparency = 1
+    lbl.Size = UDim2.new(0.5, 0, 1, 0)
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 12
+    lbl.TextColor3 = C.textMid
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Text = label
+    lbl.Parent = row
+
+    local current = CFG[cfgKey] or options[1]
+    CFG[cfgKey] = current
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.48, 0, 0, 24)
+    btn.Position = UDim2.new(0.52, 0, 0.5, -12)
+    btn.BackgroundColor3 = C.card
+    btn.BorderSizePixel = 0
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 11
+    btn.TextColor3 = C.accent
+    btn.Text = "v  " .. tostring(current)
+    btn.AutoButtonColor = false
+    btn.ZIndex = 3
+    btn.Parent = row
+    local bcr = Instance.new("UICorner"); bcr.CornerRadius = UDim.new(0, 5); bcr.Parent = btn
+    local bst = Instance.new("UIStroke"); bst.Color = C.border; bst.Transparency = 0.92; bst.Thickness = 1; bst.Parent = btn
+
+    local list = Instance.new("Frame")
+    list.Size = UDim2.new(0, 150, 0, 0)
+    list.Position = UDim2.new(1, -150, 0, 30)
+    list.BackgroundColor3 = C.surface
+    list.BorderSizePixel = 0
+    list.Visible = false
+    list.ZIndex = 50
+    list.ClipsDescendants = true
+    list.Parent = row
+    local lcr = Instance.new("UICorner"); lcr.CornerRadius = UDim.new(0, 5); lcr.Parent = list
+    local lst = Instance.new("UIStroke"); lst.Color = C.accent; lst.Transparency = 0.5; lst.Thickness = 1; lst.Parent = list
+    local ll = Instance.new("UIListLayout"); ll.Parent = list
+
+    local open = false
+    for i, opt in ipairs(options) do
+        local o = Instance.new("TextButton")
+        o.Size = UDim2.new(1, 0, 0, 24)
+        o.BackgroundColor3 = C.surface
+        o.BorderSizePixel = 0
+        o.Font = Enum.Font.Gotham
+        o.TextSize = 11
+        o.TextColor3 = C.textMid
+        o.Text = tostring(opt)
+        o.AutoButtonColor = false
+        o.ZIndex = 51
+        o.Parent = list
+        o.MouseEnter:Connect(function() o.BackgroundColor3 = C.cardHov end)
+        o.MouseLeave:Connect(function() o.BackgroundColor3 = C.surface end)
+        o.MouseButton1Click:Connect(function()
+            current = opt
+            CFG[cfgKey] = opt
+            btn.Text = "v  " .. tostring(opt)
+            open = false
+            list.Visible = false
+            if onChanged then pcall(onChanged, opt) end
+        end)
+    end
+
+    btn.MouseButton1Click:Connect(function()
+        open = not open
+        list.Visible = open
+        list.Size = open and UDim2.new(0, 150, 0, 24 * #options) or UDim2.new(0, 150, 0, 0)
+    end)
+end
+
+-- COLOR PICKER — floating RGB panel, opens below the swatch
+local function mkColorPicker(parent, label, cfgKey, onChanged)
+    local row = Instance.new("Frame")
+    row.BackgroundTransparency = 1
+    row.Size = UDim2.new(1, 0, 0, 30)
+    row.Parent = parent
+    local lbl = Instance.new("TextLabel")
+    lbl.BackgroundTransparency = 1
+    lbl.Size = UDim2.new(0.6, 0, 1, 0)
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 12
+    lbl.TextColor3 = C.textMid
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Text = label
+    lbl.Parent = row
+
+    local sw = Instance.new("TextButton")
+    sw.Size = UDim2.new(0, 28, 0, 20)
+    sw.Position = UDim2.new(1, -28, 0.5, -10)
+    sw.BackgroundColor3 = CFG[cfgKey] or Color3.fromRGB(255,255,255)
+    sw.BorderSizePixel = 0
+    sw.Text = ""
+    sw.AutoButtonColor = false
+    sw.ZIndex = 3
+    sw.Parent = row
+    local scr = Instance.new("UICorner"); scr.CornerRadius = UDim.new(0, 4); scr.Parent = sw
+    local sst = Instance.new("UIStroke"); sst.Color = C.border; sst.Transparency = 0.7; sst.Thickness = 1; sst.Parent = sw
+
+    local holder = Instance.new("Frame")
+    holder.BackgroundColor3 = C.cardHov
+    holder.BorderSizePixel = 0
+    holder.Size = UDim2.new(1, -8, 0, 90)
+    holder.Position = UDim2.new(0, 4, 1, 4)
+    holder.Visible = false
+    holder.ZIndex = 40
+    holder.ClipsDescendants = true
+    holder.Parent = row
+    local hcr = Instance.new("UICorner"); hcr.CornerRadius = UDim.new(0, 5); hcr.Parent = holder
+    local hst = Instance.new("UIStroke"); hst.Color = C.border; hst.Transparency = 0.85; hst.Thickness = 1; hst.Parent = holder
+    local hl = Instance.new("UIListLayout"); hl.Padding = UDim.new(0, 2); hl.Parent = holder
+    local hpad = Instance.new("UIPadding")
+    hpad.PaddingLeft = UDim.new(0, 8); hpad.PaddingRight = UDim.new(0, 8)
+    hpad.PaddingTop = UDim.new(0, 4); hpad.PaddingBottom = UDim.new(0, 4)
+    hpad.Parent = holder
+
+    local initCol = CFG[cfgKey] or Color3.fromRGB(255,255,255)
+    local vals = {
+        R = math.floor(initCol.R * 255 + 0.5),
+        G = math.floor(initCol.G * 255 + 0.5),
+        B = math.floor(initCol.B * 255 + 0.5),
+    }
+
+    local function rebuild()
+        sw.BackgroundColor3 = Color3.fromRGB(vals.R, vals.G, vals.B)
+        CFG[cfgKey] = sw.BackgroundColor3
+        if onChanged then pcall(onChanged, sw.BackgroundColor3) end
+    end
+
+    for _, ch in ipairs({"R","G","B"}) do
+        local chanRow = Instance.new("Frame")
+        chanRow.BackgroundTransparency = 1
+        chanRow.Size = UDim2.new(1, 0, 0, 22)
+        chanRow.ZIndex = 41
+        chanRow.Parent = holder
+        local clbl = Instance.new("TextLabel")
+        clbl.BackgroundTransparency = 1
+        clbl.Size = UDim2.new(0, 20, 1, 0)
+        clbl.Font = Enum.Font.GothamBold
+        clbl.TextSize = 11
+        clbl.TextColor3 = C.textMid
+        clbl.Text = ch
+        clbl.TextXAlignment = Enum.TextXAlignment.Left
+        clbl.ZIndex = 42
+        clbl.Parent = chanRow
+        local valLbl = Instance.new("TextLabel")
+        valLbl.BackgroundTransparency = 1
+        valLbl.Position = UDim2.new(1, -30, 0, 0)
+        valLbl.Size = UDim2.new(0, 30, 1, 0)
+        valLbl.Font = Enum.Font.GothamBold
+        valLbl.TextSize = 10
+        valLbl.TextColor3 = C.accent
+        valLbl.Text = tostring(vals[ch])
+        valLbl.ZIndex = 42
+        valLbl.Parent = chanRow
+        local trk = Instance.new("Frame")
+        trk.Position = UDim2.new(0, 26, 0.5, -2)
+        trk.Size = UDim2.new(1, -62, 0, 4)
+        trk.BackgroundColor3 = C.bg
+        trk.BorderSizePixel = 0
+        trk.ZIndex = 42
+        trk.Parent = chanRow
+        local tcr2 = Instance.new("UICorner"); tcr2.CornerRadius = UDim.new(1, 0); tcr2.Parent = trk
+        local fl = Instance.new("Frame")
+        fl.Size = UDim2.new(vals[ch] / 255, 0, 1, 0)
+        fl.BackgroundColor3 = C.accent
+        fl.BorderSizePixel = 0
+        fl.ZIndex = 43
+        fl.Parent = trk
+        local fcr2 = Instance.new("UICorner"); fcr2.CornerRadius = UDim.new(1, 0); fcr2.Parent = fl
+        local dragging2 = false
+        local function apply(px)
+            local rel = math.clamp((px - trk.AbsolutePosition.X) / math.max(trk.AbsoluteSize.X, 1), 0, 1)
+            local v = math.floor(rel * 255 + 0.5)
+            vals[ch] = v
+            fl.Size = UDim2.new(rel, 0, 1, 0)
+            valLbl.Text = tostring(v)
+            rebuild()
+        end
+        local hit2 = Instance.new("TextButton")
+        hit2.Size = UDim2.new(1, 0, 1, 0)
+        hit2.BackgroundTransparency = 1
+        hit2.Text = ""
+        hit2.ZIndex = 45
+        hit2.Parent = chanRow
+        hit2.InputBegan:Connect(function(inp)
+            if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging2 = true; apply(inp.Position.X)
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(inp)
+            if dragging2 and inp.UserInputType == Enum.UserInputType.MouseMovement then apply(inp.Position.X) end
+        end)
+        UserInputService.InputEnded:Connect(function(inp)
+            if inp.UserInputType == Enum.UserInputType.MouseButton1 then dragging2 = false end
+        end)
+    end
+
+    local open = false
+    sw.MouseButton1Click:Connect(function()
+        open = not open
+        holder.Visible = open
+    end)
 end
 
 local function mkInfoRow(parent, label, getter)
@@ -523,7 +750,7 @@ local function mkInfoRow(parent, label, getter)
 end
 
 -- ============================================================================
--- PAGES
+-- PAGES — nav button made the actual clickable, label is the button text
 -- ============================================================================
 
 local PAGE_NAMES = {"Home","Combat","ESP","Movement","Visuals","Teleport","Spawning","Prison","Players","Settings"}
@@ -535,10 +762,18 @@ for i, name in ipairs(PAGE_NAMES) do
     btn.BackgroundColor3 = C.bg
     btn.BackgroundTransparency = 1
     btn.BorderSizePixel = 0
-    btn.Text = ""
+    btn.Text = name
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.TextColor3 = C.textDim
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 12
     btn.AutoButtonColor = false
+    btn.ZIndex = 3
     btn.Parent = sidebar
     local bcr = Instance.new("UICorner"); bcr.CornerRadius = UDim.new(0, 5); bcr.Parent = btn
+    local bpad = Instance.new("UIPadding")
+    bpad.PaddingLeft = UDim.new(0, 14)
+    bpad.Parent = btn
 
     local ind = Instance.new("Frame")
     ind.Name = "_ind"
@@ -547,20 +782,9 @@ for i, name in ipairs(PAGE_NAMES) do
     ind.BackgroundColor3 = C.accent
     ind.BorderSizePixel = 0
     ind.BackgroundTransparency = 1
+    ind.ZIndex = 4
     ind.Parent = btn
     local icr = Instance.new("UICorner"); icr.CornerRadius = UDim.new(1, 0); icr.Parent = ind
-
-    local lbl = Instance.new("TextLabel")
-    lbl.Name = "navLabel"
-    lbl.BackgroundTransparency = 1
-    lbl.Size = UDim2.new(1, -16, 1, 0)
-    lbl.Position = UDim2.new(0, 14, 0, 0)
-    lbl.Font = Enum.Font.Gotham
-    lbl.TextSize = 12
-    lbl.TextColor3 = C.textDim
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Text = name
-    lbl.Parent = btn
 
     NAVBTNS[name] = btn
 
@@ -579,15 +803,17 @@ local function setPage(name)
     for n, frame in pairs(PAGES) do frame.Visible = (n == name) end
     for n, btn in pairs(NAVBTNS) do
         local active = (n == name)
-        tw(btn, 0.1, {
-            BackgroundColor3 = active and Color3.fromRGB(20,22,32) or C.bg,
-            BackgroundTransparency = active and 0 or 1,
-        })
+        btn.BackgroundTransparency = active and 0 or 1
+        btn.BackgroundColor3 = active and Color3.fromRGB(20,22,32) or C.bg
+        btn.TextColor3 = active and C.text or C.textDim
         local ind = btn:FindFirstChild("_ind")
-        if ind then tw(ind, 0.1, { BackgroundTransparency = active and 0 or 1 }) end
-        local lbl = btn:FindFirstChild("navLabel")
-        if lbl then lbl.TextColor3 = active and C.text or C.textDim end
+        if ind then ind.BackgroundTransparency = active and 0 or 1 end
     end
+end
+
+-- wire click handlers AFTER all pages exist
+for name, btn in pairs(NAVBTNS) do
+    btn.MouseButton1Click:Connect(function() setPage(name) end)
 end
 
 -- ============================================================================
@@ -613,7 +839,7 @@ do
     sub.TextSize = 12
     sub.TextColor3 = C.textDim
     sub.TextXAlignment = Enum.TextXAlignment.Left
-    sub.Text = "Valley Prison  ·  NyxScript v2.0-JS"
+    sub.Text = "Valley Prison  ·  NyxScript v2.1-JS"
     sub.Parent = c1
     local hint = Instance.new("TextLabel")
     hint.BackgroundTransparency = 1
@@ -654,13 +880,16 @@ do
     secLabel(pg, "Aimbot")
     local c = mkCard(pg)
     mkToggle(c, "Aimbot", "Aimbot")
-    mkToggle(c, "Aimlock (hard snap)", "Aimlock")
+    mkToggle(c, "Aimlock (instant snap)", "Aimlock")
     mkToggle(c, "FOV Ring", "AimbotFOVRing")
+    mkColorPicker(c, "FOV Ring Color", "AimbotFOVRingColor")
     mkToggle(c, "Require Gun", "AimbotRequireGun")
     mkToggle(c, "Wall Check", "AimbotWallCheck")
     mkToggle(c, "Team Check", "AimbotTeamCheck")
     mkSlider(c, "FOV Radius", "AimbotFOV", 30, 400, 5)
-    mkSlider(c, "Smoothness", "AimbotSmooth", 0, 1, 0.01)
+    mkSlider(c, "Smoothness (0=instant, 1=slow)", "AimbotSmooth", 0, 0.5, 0.01)
+    mkSlider(c, "Aim Max Distance (studs)", "AimbotMaxDist", 50, 2000, 25)
+    mkDrop(c, "Aim Part", {"Head","HumanoidRootPart","UpperTorso","Torso"}, "AimbotPart")
 
     secLabel(pg, "Weapon Mods")
     local c4 = mkCard(pg)
@@ -677,24 +906,31 @@ do
 end
 
 -- ============================================================================
--- ESP
+-- ESP — wallhack is automatic when ESP is on, no separate toggle to forget
 -- ============================================================================
 
 do
     local pg = PAGES.ESP
     secLabel(pg, "Player ESP")
     local c1 = mkCard(pg)
-    mkToggle(c1, "Player Highlight", "PlayerESP")
-    mkToggle(c1, "Wallhack (AlwaysOnTop)", "WallHack")
+    mkToggle(c1, "Player Highlight (through walls)", "PlayerESP")
     mkToggle(c1, "Chams", "ChamsESP")
+    mkColorPicker(c1, "Fill Color", "ESPFillColor")
+    mkColorPicker(c1, "Outline Color", "ESPOutlineColor")
+    mkSlider(c1, "Fill Transparency", "ESPFillTransparency", 0, 1, 0.05)
+    mkSlider(c1, "ESP Max Distance", "ESPMaxDist", 100, 2000, 25)
     mkToggle(c1, "Team Colors", "TeamColors")
-    mkSlider(c1, "Max Distance", "ESPMaxDist", 250, 1000, 25)
 
     secLabel(pg, "Tags")
     local c2 = mkCard(pg)
     mkToggle(c2, "Name Tags", "NameESP")
     mkToggle(c2, "Health Bar", "HealthESP")
     mkToggle(c2, "Distance Tag", "DistanceESP")
+
+    secLabel(pg, "World ESP")
+    local c3 = mkCard(pg)
+    mkToggle(c3, "Item ESP (dropped tools)", "ItemESP")
+    mkSlider(c3, "Item ESP Max Distance", "ItemMaxDist", 25, 500, 25)
 end
 
 -- ============================================================================
@@ -730,6 +966,9 @@ do
     mkToggle(c5, "God Mode", "GodMode")
     mkToggle(c5, "Anti-Gravity", "AntiGravity", function(v)
         workspace.Gravity = v and CFG.GravityValue or 196.2
+    end)
+    mkSlider(c5, "Gravity", "GravityValue", 0, 196, 5, function(v)
+        if CFG.AntiGravity then workspace.Gravity = v end
     end)
     mkToggle(c5, "Teleport to Cursor (hold T)", "TpToCursor")
 end
@@ -843,6 +1082,7 @@ do
             goBtn.TextSize = 10
             goBtn.TextColor3 = C.text
             goBtn.Text = "Go"
+            goBtn.ZIndex = 2
             goBtn.Parent = r
             local gbc = Instance.new("UICorner"); gbc.CornerRadius = UDim.new(0, 3); gbc.Parent = goBtn
             goBtn.MouseButton1Click:Connect(function()
@@ -858,6 +1098,7 @@ do
             delBtn.TextSize = 10
             delBtn.TextColor3 = C.bg
             delBtn.Text = "Del"
+            delBtn.ZIndex = 2
             delBtn.Parent = r
             local dbc = Instance.new("UICorner"); dbc.CornerRadius = UDim.new(0, 3); dbc.Parent = delBtn
             delBtn.MouseButton1Click:Connect(function()
@@ -874,10 +1115,6 @@ do
         rebuildSaved()
         notify("Position saved", "ok")
     end)
-
-    secLabel(pg, "Teleport to Cursor")
-    local c4 = mkCard(pg)
-    mkToggle(c4, "Enable TP-to-cursor (hold T)", "TpToCursor")
 end
 
 -- ============================================================================
@@ -961,6 +1198,7 @@ do
             b.TextSize = 10
             b.TextColor3 = C.text
             b.Text = "Get"
+            b.ZIndex = 2
             b.Parent = r
             local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 3); bc.Parent = b
             b.MouseButton1Click:Connect(function() pcall(function() tryGetItem(itemName) end) end)
@@ -1121,6 +1359,7 @@ do
                 tpBtn.TextSize = 10
                 tpBtn.TextColor3 = C.text
                 tpBtn.Text = "TP"
+                tpBtn.ZIndex = 2
                 tpBtn.Parent = r
                 local tbc = Instance.new("UICorner"); tbc.CornerRadius = UDim.new(0, 3); tbc.Parent = tpBtn
                 tpBtn.MouseButton1Click:Connect(function()
@@ -1166,7 +1405,7 @@ do
     secLabel(pg, "About")
     local c3 = mkCard(pg)
     mkInfoRow(c3, "Game", function() return "Valley Prison" end)
-    mkInfoRow(c3, "Script", function() return "NyxScript v2.0-JS" end)
+    mkInfoRow(c3, "Script", function() return "NyxScript v2.1-JS" end)
     mkInfoRow(c3, "Build", function() return os.date("%Y-%m-%d") end)
 end
 
@@ -1195,7 +1434,7 @@ local function getBestTarget()
         if pl ~= lp and isAlive(pl) then
             local skip = false
             if CFG.AimbotTeamCheck and lp.Team and pl.Team == lp.Team then skip = true end
-            if dist(pl) > CFG.ESPMaxDist then skip = true end
+            if dist(pl) > CFG.AimbotMaxDist then skip = true end
             if CFG.AimbotRequireGun and not hasGun() then skip = true end
             if not skip then
                 local ch = chr(pl)
@@ -1231,12 +1470,13 @@ local function getBestTarget()
     return candidates[1].part
 end
 
--- FOV circle drawn with a Frame + UIStroke, exactly like the working aim-assist script.
+-- FOV ring — Frame + UIStroke, same technique as working aim assist
 local fovCircle = Instance.new("Frame")
 fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 fovCircle.BackgroundTransparency = 1
 fovCircle.BorderSizePixel = 0
 fovCircle.Visible = false
+fovCircle.ZIndex = 500
 fovCircle.Parent = gui
 local fovStroke = Instance.new("UIStroke")
 fovStroke.Thickness = 1.5
@@ -1248,7 +1488,7 @@ fovCorner.CornerRadius = UDim.new(1, 0)
 fovCorner.Parent = fovCircle
 
 -- ============================================================================
--- ESP
+-- ESP — always through walls
 -- ============================================================================
 
 local espHighlights = {}
@@ -1267,7 +1507,7 @@ local function buildESP(pl)
     hl.OutlineColor = CFG.TeamColors and teamColor(pl) or CFG.ESPOutlineColor
     hl.FillTransparency = CFG.ESPFillTransparency
     hl.OutlineTransparency = CFG.ESPOutlineTransparency
-    hl.DepthMode = CFG.WallHack and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
+    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     hl.Adornee = ch
     hl.Enabled = CFG.PlayerESP or CFG.ChamsESP
     hl.Parent = ch
@@ -1389,7 +1629,7 @@ local function updateHighlight(pl)
         hl.FillTransparency = CFG.ESPFillTransparency
         hl.OutlineTransparency = CFG.ESPOutlineTransparency
     end
-    hl.DepthMode = CFG.WallHack and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
+    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 end
 
 Players.PlayerAdded:Connect(function(pl)
@@ -1645,11 +1885,11 @@ lp.CharacterAdded:Connect(function()
 end)
 
 -- ============================================================================
--- AIM LOOP (RenderStepped, not BindToRenderStep)
+-- AIM LOOP — camera goes Scriptable while aiming, back to Custom on release
 -- ============================================================================
 
+local _cameraSaved = false
 RunService.RenderStepped:Connect(function()
-    -- FOV ring
     fovCircle.Visible = CFG.AimbotFOVRing and (CFG.Aimbot or CFG.Aimlock)
     if fovCircle.Visible then
         local vp = cam.ViewportSize
@@ -1658,17 +1898,28 @@ RunService.RenderStepped:Connect(function()
         fovStroke.Color = CFG.AimbotFOVRingColor
     end
 
-    if not (CFG.Aimbot or CFG.Aimlock) then return end
-    if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
-    if CFG.AimbotRequireGun and not hasGun() then return end
-    local t = getBestTarget()
-    if not t then return end
-    local goalCF = CFrame.new(cam.CFrame.Position, t.Position)
-    if CFG.Aimlock then
-        cam.CFrame = goalCF
-    else
-        local alpha = math.clamp(1 - CFG.AimbotSmooth, 0.01, 1)
-        cam.CFrame = cam.CFrame:Lerp(goalCF, alpha)
+    local holding = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+    local active = (CFG.Aimbot or CFG.Aimlock) and holding
+        and (not CFG.AimbotRequireGun or hasGun())
+
+    if active then
+        if not _cameraSaved then
+            cam.CameraType = Enum.CameraType.Scriptable
+            _cameraSaved = true
+        end
+        local t = getBestTarget()
+        if t then
+            local goalCF = CFrame.new(cam.CFrame.Position, t.Position)
+            if CFG.Aimlock or CFG.AimbotSmooth <= 0 then
+                cam.CFrame = goalCF
+            else
+                local alpha = math.clamp(1 - CFG.AimbotSmooth * 2, 0.05, 1)
+                cam.CFrame = cam.CFrame:Lerp(goalCF, alpha)
+            end
+        end
+    elseif _cameraSaved then
+        cam.CameraType = Enum.CameraType.Custom
+        _cameraSaved = false
     end
 end)
 
@@ -1709,4 +1960,4 @@ end)
 
 win.Visible = true
 CFG.Open = true
-notify("NyxScript v2.0-JS loaded", "ok", 4)
+notify("NyxScript v2.1-JS loaded", "ok", 4)
