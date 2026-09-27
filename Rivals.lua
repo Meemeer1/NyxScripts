@@ -1,6 +1,6 @@
--- language: Lua (Luau), file: rivals_aim_stable.lua
--- target: JJSploit / low-tier executors. No Drawing. No metatable hooks.
--- only aimbot + aimlock + esp highlight + distance + sliders + wallcheck
+-- language: Lua (Luau), file: rivals_aim_fixed.lua
+-- target: JJSploit / low-tier executors. No Drawing.
+-- only aimbot + aimlock + esp + distance + sliders + wallcheck.
 
 local Players          = game:GetService("Players")
 local RunService       = game:GetService("RunService")
@@ -23,25 +23,19 @@ end
 local function hasGun()
     local ch = chr(lp)
     if not ch then return false end
-    local tool = ch:FindFirstChildOfClass("Tool")
-    if not tool then return false end
-    local n = tool.Name:lower()
-    local words = {"gun","pistol","rifle","shot","snip","smg","revolver",
-                   "mp5","ak","m4","g18","glock","ump","p90","ksg","m1911","uzi","awp","deagle"}
-    for _, w in ipairs(words) do if n:find(w) then return true end end
-    return tool:FindFirstChild("Shoot") ~= nil or tool:FindFirstChild("Fire") ~= nil
+    return ch:FindFirstChildOfClass("Tool") ~= nil
 end
 
 local CFG = {
     Aimbot = false,
     Aimlock = false,
-    AimbotFOV = 150,
-    AimbotSmooth = 0.15,
+    AimbotFOV = 200,
+    AimbotSmooth = 0.25,
     AimbotPart = "Head",
-    AimbotTeamCheck = true,
+    AimbotTeamCheck = false,
     AimbotRequireGun = false,
     AimbotWallCheck = false,
-    AimbotMaxDist = 500,
+    AimbotMaxDist = 800,
     AimbotFOVRing = true,
     AimbotFOVRingColor = Color3.fromRGB(0, 255, 170),
     PlayerESP = false,
@@ -50,7 +44,7 @@ local CFG = {
     ESPOutlineColor = Color3.fromRGB(99, 179, 237),
     ESPFillTransparency = 0.35,
     ESPOutlineTransparency = 0,
-    ESPMaxDist = 500,
+    ESPMaxDist = 800,
     DistanceESP = false,
     Open = true,
     MenuKey = Enum.KeyCode.Insert,
@@ -81,7 +75,7 @@ local function isTeammate(pl)
 end
 
 -- ============================================================================
--- GUI (same pattern as before)
+-- GUI
 -- ============================================================================
 local gui = Instance.new("ScreenGui")
 gui.Name = "RIV_Main"
@@ -103,21 +97,19 @@ Instance.new("UICorner", win).CornerRadius = UDim.new(0, 10)
 local wst = Instance.new("UIStroke", win)
 wst.Color = C.border; wst.Transparency = 0.88; wst.Thickness = 1
 
-local titleBar = Instance.new("Frame")
+local titleBar = Instance.new("Frame", win)
 titleBar.Size = UDim2.new(1, 0, 0, 40)
 titleBar.BackgroundColor3 = C.surface
 titleBar.BorderSizePixel = 0
-titleBar.Parent = win
 
-local accentStrip = Instance.new("Frame")
+local accentStrip = Instance.new("Frame", titleBar)
 accentStrip.Size = UDim2.new(0, 3, 0, 22)
 accentStrip.Position = UDim2.new(0, 14, 0.5, -11)
 accentStrip.BackgroundColor3 = C.accent
 accentStrip.BorderSizePixel = 0
-accentStrip.Parent = titleBar
 Instance.new("UICorner", accentStrip).CornerRadius = UDim.new(0, 2)
 
-local titleLbl = Instance.new("TextLabel")
+local titleLbl = Instance.new("TextLabel", titleBar)
 titleLbl.BackgroundTransparency = 1
 titleLbl.Position = UDim2.new(0, 26, 0, 6)
 titleLbl.Size = UDim2.new(0, 300, 0, 16)
@@ -126,9 +118,8 @@ titleLbl.TextSize = 14
 titleLbl.TextColor3 = C.text
 titleLbl.TextXAlignment = Enum.TextXAlignment.Left
 titleLbl.Text = "RIVALS"
-titleLbl.Parent = titleBar
 
-local subLbl = Instance.new("TextLabel")
+local subLbl = Instance.new("TextLabel", titleBar)
 subLbl.BackgroundTransparency = 1
 subLbl.Position = UDim2.new(0, 26, 0, 22)
 subLbl.Size = UDim2.new(0, 300, 0, 12)
@@ -137,9 +128,8 @@ subLbl.TextSize = 10
 subLbl.TextColor3 = C.textDim
 subLbl.TextXAlignment = Enum.TextXAlignment.Left
 subLbl.Text = "aim + esp  ·  Insert"
-subLbl.Parent = titleBar
 
-local btnClose = Instance.new("TextButton")
+local btnClose = Instance.new("TextButton", titleBar)
 btnClose.Size = UDim2.new(0, 20, 0, 20)
 btnClose.Position = UDim2.new(1, -28, 0, 10)
 btnClose.BackgroundColor3 = C.danger
@@ -150,10 +140,9 @@ btnClose.TextSize = 14
 btnClose.TextColor3 = C.bg
 btnClose.AutoButtonColor = false
 btnClose.ZIndex = 5
-btnClose.Parent = titleBar
 Instance.new("UICorner", btnClose).CornerRadius = UDim.new(1, 0)
 
-local content = Instance.new("ScrollingFrame")
+local content = Instance.new("ScrollingFrame", win)
 content.Size = UDim2.new(1, -20, 1, -60)
 content.Position = UDim2.new(0, 10, 0, 50)
 content.BackgroundTransparency = 1
@@ -162,7 +151,6 @@ content.CanvasSize = UDim2.new(0, 0, 0, 0)
 content.AutomaticCanvasSize = Enum.AutomaticSize.Y
 content.ScrollBarThickness = 3
 content.ScrollBarImageColor3 = C.accent
-content.Parent = win
 local cl = Instance.new("UIListLayout", content)
 cl.Padding = UDim.new(0, 6)
 local cpad = Instance.new("UIPadding", content)
@@ -394,15 +382,15 @@ end
 
 secLabel(content, "Aimbot")
 local c1 = mkCard(content)
-mkToggle(c1, "Aimbot (hold RMB)", "Aimbot")
+mkToggle(c1, "Aimbot (always-on while enabled)", "Aimbot")
 mkToggle(c1, "Aimlock (hold RMB, snap)", "Aimlock")
 mkToggle(c1, "Team Check", "AimbotTeamCheck")
 mkToggle(c1, "Require Gun", "AimbotRequireGun")
 mkToggle(c1, "Wall Check", "AimbotWallCheck")
 mkToggle(c1, "FOV Ring", "AimbotFOVRing")
-mkSlider(c1, "FOV Radius", "AimbotFOV", 30, 500, 5)
-mkSlider(c1, "Smoothness", "AimbotSmooth", 0, 0.5, 0.01)
-mkSlider(c1, "Max Distance", "AimbotMaxDist", 50, 2000, 25)
+mkSlider(c1, "FOV Radius", "AimbotFOV", 50, 800, 10)
+mkSlider(c1, "Smoothness", "AimbotSmooth", 0.02, 1.0, 0.01)
+mkSlider(c1, "Max Distance", "AimbotMaxDist", 50, 3000, 25)
 mkDrop(c1, "Aim Part", {"Head", "HumanoidRootPart", "UpperTorso", "Torso"}, "AimbotPart")
 
 secLabel(content, "ESP")
@@ -410,7 +398,7 @@ local c2 = mkCard(content)
 mkToggle(c2, "Player Highlight (through walls)", "PlayerESP")
 mkToggle(c2, "Distance Tag", "DistanceESP")
 mkToggle(c2, "Team Colors", "TeamColors")
-mkSlider(c2, "ESP Max Distance", "ESPMaxDist", 100, 2000, 25)
+mkSlider(c2, "ESP Max Distance", "ESPMaxDist", 100, 3000, 25)
 mkSlider(c2, "Fill Transparency", "ESPFillTransparency", 0, 1, 0.05)
 
 -- ============================================================================
@@ -425,6 +413,7 @@ local function getBestTarget()
             local skip = false
             if CFG.AimbotTeamCheck and isTeammate(pl) then skip = true end
             if dist(pl) > CFG.AimbotMaxDist then skip = true end
+            if CFG.AimbotRequireGun and not hasGun() then skip = true end
             if not skip then
                 local ch = chr(pl)
                 local pt = ch and (ch:FindFirstChild(CFG.AimbotPart) or root(pl))
@@ -457,7 +446,7 @@ local function getBestTarget()
     return bestPart
 end
 
--- FOV ring — Frame + UIStroke (no Drawing)
+-- FOV ring — Frame + UIStroke
 local fovCircle = Instance.new("Frame", gui)
 fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 fovCircle.BackgroundTransparency = 1
@@ -471,20 +460,38 @@ fovStroke.Transparency = 0.25
 Instance.new("UICorner", fovCircle).CornerRadius = UDim.new(1, 0)
 
 -- ============================================================================
--- AIM LOOP — stable
+-- AIM LOOPS
 -- ============================================================================
-local cameraSaved = false
-local graceUntil = 0     -- hold Scriptable for a short window after losing target
+-- KEY DESIGN:
+--   Aimbot   = always-on while enabled, mouse stays free, smooth lerp each frame
+--   Aimlock  = hold RMB, mouse stays free, hard snap each frame
+--
+-- Both write camera CFrame ONLY when a target is in FOV. When no target,
+-- the loop does nothing — camera stays in Custom mode, mouse works normally.
 
-local function restoreCamera()
-    if cameraSaved then
-        cam.CameraType = Enum.CameraType.Custom
-        cameraSaved = false
-    end
+local BIND_NAME = "RIV_AimCamera"
+local CAS = game:GetService("ContextActionService")
+
+-- Keep a Scriptable camera ONLY while aiming + target present.
+-- Binding a low-priority action prevents the default camera from taking over
+-- while we hold CFrame writes, but does NOT stop mouse-look — Roblox's mouse
+-- delta is applied by the default camera script only when CameraType == Custom,
+-- so as long as we restore Custom the moment we stop aiming, mouse is free.
+
+local camLock = false
+local function lockCamera()
+    if camLock then return end
+    cam.CameraType = Enum.CameraType.Scriptable
+    camLock = true
+end
+local function unlockCamera()
+    if not camLock then return end
+    cam.CameraType = Enum.CameraType.Custom
+    camLock = false
 end
 
+-- Aimbot: always-on, no key, smooth
 RunService.RenderStepped:Connect(function(dt)
-    -- FOV ring
     local ringOn = CFG.AimbotFOVRing and (CFG.Aimbot or CFG.Aimlock)
     fovCircle.Visible = ringOn
     if ringOn then
@@ -494,48 +501,56 @@ RunService.RenderStepped:Connect(function(dt)
         fovStroke.Color = CFG.AimbotFOVRingColor
     end
 
-    local holding = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
-    local wantAim = (CFG.Aimbot or CFG.Aimlock) and holding
-        and (not CFG.AimbotRequireGun or hasGun())
-
-    if wantAim then
+    -- AIMBOT: always-on when enabled
+    if CFG.Aimbot then
         local t = getBestTarget()
         if t then
-            -- first frame of aiming: save camera
-            if not cameraSaved then
-                cam.CameraType = Enum.CameraType.Scriptable
-                cameraSaved = true
-            end
-            graceUntil = tick() + 0.15
-
-            -- use current camera position, look at target
+            lockCamera()
+            -- read camera position EVERY frame so lerp stays continuous
             local camPos = cam.CFrame.Position
             local goal = CFrame.lookAt(camPos, t.Position)
-
-            if CFG.Aimlock or CFG.AimbotSmooth <= 0.001 then
+            if CFG.AimbotSmooth <= 0.02 then
                 cam.CFrame = goal
             else
-                -- frame-rate independent lerp
-                local s = math.clamp(CFG.AimbotSmooth, 0.01, 0.99)
+                local s = math.clamp(CFG.AimbotSmooth, 0.02, 1.0)
                 local alpha = 1 - math.pow(1 - s, dt * 60)
                 cam.CFrame = cam.CFrame:Lerp(goal, alpha)
             end
         else
-            -- target lost: keep camera Scriptable for grace window, don't write CFrame
-            if cameraSaved and tick() > graceUntil then
-                restoreCamera()
+            -- no target: if Aimlock isn't also active, release camera so mouse works
+            if not (CFG.Aimlock and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)) then
+                unlockCamera()
+            end
+        end
+    end
+end)
+
+-- Aimlock: hold RMB, hard snap
+RunService.RenderStepped:Connect(function()
+    local holdingRMB = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+    if CFG.Aimlock and holdingRMB and (not CFG.AimbotRequireGun or hasGun()) then
+        local t = getBestTarget()
+        if t then
+            lockCamera()
+            cam.CFrame = CFrame.lookAt(cam.CFrame.Position, t.Position)
+        else
+            -- holding RMB but no target: keep camera unlocked so mouse still works
+            if not CFG.Aimbot then
+                unlockCamera()
             end
         end
     else
-        -- not aiming
-        if cameraSaved then
-            restoreCamera()
+        -- not holding / aimlock off
+        if not CFG.Aimbot then
+            unlockCamera()
+        elseif not getBestTarget() then
+            unlockCamera()
         end
     end
 end)
 
 -- ============================================================================
--- ESP — Highlight + BillboardGui
+-- ESP
 -- ============================================================================
 local espHighlights = {}
 local tagFolder = workspace:FindFirstChild("RIV_Tags") or Instance.new("Folder")
