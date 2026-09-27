@@ -1,6 +1,6 @@
--- language: Lua (Luau), file: rivals_aim_fixed.lua
+-- language: Lua (Luau), file: rivals_aim_esp_binds.lua
 -- target: JJSploit / low-tier executors. No Drawing.
--- only aimbot + aimlock + esp + distance + sliders + wallcheck.
+-- aimbot + aimlock + esp + distance + sliders + wallcheck + keybinds.
 
 local Players          = game:GetService("Players")
 local RunService       = game:GetService("RunService")
@@ -29,8 +29,8 @@ end
 local CFG = {
     Aimbot = false,
     Aimlock = false,
-    AimbotFOV = 200,
-    AimbotSmooth = 0.25,
+    AimbotFOV = 300,
+    AimbotSmooth = 0.3,
     AimbotPart = "Head",
     AimbotTeamCheck = false,
     AimbotRequireGun = false,
@@ -48,6 +48,9 @@ local CFG = {
     DistanceESP = false,
     Open = true,
     MenuKey = Enum.KeyCode.Insert,
+    -- keybinds (nil = unbound)
+    BindESP = nil,
+    BindAimbot = nil,
 }
 
 local C = {
@@ -84,7 +87,7 @@ gui.IgnoreGuiInset = true
 gui.DisplayOrder = 1000
 gui.Parent = lp:WaitForChild("PlayerGui")
 
-local W, H = 520, 460
+local W, H = 520, 500
 local win = Instance.new("Frame")
 win.Size = UDim2.new(0, W, 0, H)
 win.Position = UDim2.new(0.5, -W/2, 0.5, -H/2)
@@ -380,18 +383,90 @@ local function mkDrop(parent, label, options, cfgKey)
     end)
 end
 
+-- ────────────────────────────────────────────────────────────────────────────
+-- KEYBIND ROW — click button, press a key, it binds. Right-click to clear.
+-- ────────────────────────────────────────────────────────────────────────────
+local capturingBind = nil  -- which CFG key we're capturing for
+local bindButtons = {}     -- cfgKey -> button label to update
+
+local function prettyKey(keyCode)
+    if not keyCode then return "None" end
+    local name = keyCode.Name
+    -- strip common prefixes for readability
+    name = name:gsub("KeyCode%.", "")
+    return name
+end
+
+local function mkKeybind(parent, label, cfgKey)
+    local row = Instance.new("Frame", parent)
+    row.BackgroundTransparency = 1
+    row.Size = UDim2.new(1, 0, 0, 30)
+    local lbl = Instance.new("TextLabel", row)
+    lbl.BackgroundTransparency = 1
+    lbl.Size = UDim2.new(0.5, 0, 1, 0)
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 13
+    lbl.TextColor3 = C.textMid
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Text = label
+    local btn = Instance.new("TextButton", row)
+    btn.Size = UDim2.new(0.48, 0, 0, 24)
+    btn.Position = UDim2.new(0.52, 0, 0.5, -12)
+    btn.BackgroundColor3 = C.card
+    btn.BorderSizePixel = 0
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 11
+    btn.TextColor3 = C.accent
+    btn.Text = prettyKey(CFG[cfgKey])
+    btn.AutoButtonColor = false
+    btn.ZIndex = 3
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
+    local bst = Instance.new("UIStroke", btn)
+    bst.Color = C.border; bst.Transparency = 0.92; bst.Thickness = 1
+
+    bindButtons[cfgKey] = btn
+
+    btn.MouseButton1Click:Connect(function()
+        if capturingBind == cfgKey then
+            capturingBind = nil
+            btn.Text = prettyKey(CFG[cfgKey])
+            btn.TextColor3 = C.accent
+            btn.BackgroundColor3 = C.card
+            return
+        end
+        capturingBind = cfgKey
+        btn.Text = "press key..."
+        btn.TextColor3 = C.bg
+        btn.BackgroundColor3 = C.accent
+    end)
+
+    btn.MouseButton2Click:Connect(function()
+        CFG[cfgKey] = nil
+        btn.Text = "None"
+        if capturingBind == cfgKey then
+            capturingBind = nil
+            btn.TextColor3 = C.accent
+            btn.BackgroundColor3 = C.card
+        end
+    end)
+end
+
+-- ============================================================================
+-- BUILD MENU
+-- ============================================================================
 secLabel(content, "Aimbot")
 local c1 = mkCard(content)
-mkToggle(c1, "Aimbot (always-on while enabled)", "Aimbot")
-mkToggle(c1, "Aimlock (hold RMB, snap)", "Aimlock")
+mkToggle(c1, "Aimbot (always-on, smooth)", "Aimbot")
+mkToggle(c1, "Aimlock (always-on, snap)", "Aimlock")
 mkToggle(c1, "Team Check", "AimbotTeamCheck")
 mkToggle(c1, "Require Gun", "AimbotRequireGun")
 mkToggle(c1, "Wall Check", "AimbotWallCheck")
 mkToggle(c1, "FOV Ring", "AimbotFOVRing")
 mkSlider(c1, "FOV Radius", "AimbotFOV", 50, 800, 10)
-mkSlider(c1, "Smoothness", "AimbotSmooth", 0.02, 1.0, 0.01)
+mkSlider(c1, "Smoothness", "AimbotSmooth", 0.05, 1.0, 0.01)
 mkSlider(c1, "Max Distance", "AimbotMaxDist", 50, 3000, 25)
 mkDrop(c1, "Aim Part", {"Head", "HumanoidRootPart", "UpperTorso", "Torso"}, "AimbotPart")
+mkKeybind(c1, "Aimbot Toggle Bind", "BindAimbot")
 
 secLabel(content, "ESP")
 local c2 = mkCard(content)
@@ -400,6 +475,48 @@ mkToggle(c2, "Distance Tag", "DistanceESP")
 mkToggle(c2, "Team Colors", "TeamColors")
 mkSlider(c2, "ESP Max Distance", "ESPMaxDist", 100, 3000, 25)
 mkSlider(c2, "Fill Transparency", "ESPFillTransparency", 0, 1, 0.05)
+mkKeybind(c2, "ESP Toggle Bind", "BindESP")
+
+-- ============================================================================
+-- KEYBIND CAPTURE + FIRE
+-- ============================================================================
+-- Capture mode: next key pressed becomes the bind.
+-- Fire mode: when a bound key is pressed, toggle its feature.
+UserInputService.InputBegan:Connect(function(inp, gpe)
+    -- if we're capturing a bind, this key becomes the bind — regardless of gpe
+    if capturingBind then
+        if inp.UserInputType == Enum.UserInputType.Keyboard
+           and inp.KeyCode ~= Enum.KeyCode.Unknown then
+            CFG[capturingBind] = inp.KeyCode
+            local btn = bindButtons[capturingBind]
+            if btn then
+                btn.Text = prettyKey(inp.KeyCode)
+                btn.TextColor3 = C.accent
+                btn.BackgroundColor3 = C.card
+            end
+            capturingBind = nil
+        end
+        return
+    end
+
+    if gpe then return end
+    if inp.UserInputType ~= Enum.UserInputType.Keyboard then return end
+
+    -- menu toggle always
+    if inp.KeyCode == CFG.MenuKey then
+        CFG.Open = not CFG.Open
+        win.Visible = CFG.Open
+        return
+    end
+
+    -- feature binds
+    if CFG.BindAimbot and inp.KeyCode == CFG.BindAimbot then
+        CFG.Aimbot = not CFG.Aimbot
+    end
+    if CFG.BindESP and inp.KeyCode == CFG.BindESP then
+        CFG.PlayerESP = not CFG.PlayerESP
+    end
+end)
 
 -- ============================================================================
 -- TARGET SELECTION
@@ -446,7 +563,7 @@ local function getBestTarget()
     return bestPart
 end
 
--- FOV ring — Frame + UIStroke
+-- FOV ring
 local fovCircle = Instance.new("Frame", gui)
 fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 fovCircle.BackgroundTransparency = 1
@@ -460,24 +577,8 @@ fovStroke.Transparency = 0.25
 Instance.new("UICorner", fovCircle).CornerRadius = UDim.new(1, 0)
 
 -- ============================================================================
--- AIM LOOPS
+-- AIM LOOP — no keys, always-on toggles
 -- ============================================================================
--- KEY DESIGN:
---   Aimbot   = always-on while enabled, mouse stays free, smooth lerp each frame
---   Aimlock  = hold RMB, mouse stays free, hard snap each frame
---
--- Both write camera CFrame ONLY when a target is in FOV. When no target,
--- the loop does nothing — camera stays in Custom mode, mouse works normally.
-
-local BIND_NAME = "RIV_AimCamera"
-local CAS = game:GetService("ContextActionService")
-
--- Keep a Scriptable camera ONLY while aiming + target present.
--- Binding a low-priority action prevents the default camera from taking over
--- while we hold CFrame writes, but does NOT stop mouse-look — Roblox's mouse
--- delta is applied by the default camera script only when CameraType == Custom,
--- so as long as we restore Custom the moment we stop aiming, mouse is free.
-
 local camLock = false
 local function lockCamera()
     if camLock then return end
@@ -490,7 +591,6 @@ local function unlockCamera()
     camLock = false
 end
 
--- Aimbot: always-on, no key, smooth
 RunService.RenderStepped:Connect(function(dt)
     local ringOn = CFG.AimbotFOVRing and (CFG.Aimbot or CFG.Aimlock)
     fovCircle.Visible = ringOn
@@ -501,50 +601,30 @@ RunService.RenderStepped:Connect(function(dt)
         fovStroke.Color = CFG.AimbotFOVRingColor
     end
 
-    -- AIMBOT: always-on when enabled
-    if CFG.Aimbot then
-        local t = getBestTarget()
-        if t then
-            lockCamera()
-            -- read camera position EVERY frame so lerp stays continuous
-            local camPos = cam.CFrame.Position
-            local goal = CFrame.lookAt(camPos, t.Position)
-            if CFG.AimbotSmooth <= 0.02 then
-                cam.CFrame = goal
-            else
-                local s = math.clamp(CFG.AimbotSmooth, 0.02, 1.0)
-                local alpha = 1 - math.pow(1 - s, dt * 60)
-                cam.CFrame = cam.CFrame:Lerp(goal, alpha)
-            end
-        else
-            -- no target: if Aimlock isn't also active, release camera so mouse works
-            if not (CFG.Aimlock and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)) then
-                unlockCamera()
-            end
-        end
+    local active = CFG.Aimbot or CFG.Aimlock
+    if not active then
+        unlockCamera()
+        return
     end
-end)
 
--- Aimlock: hold RMB, hard snap
-RunService.RenderStepped:Connect(function()
-    local holdingRMB = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
-    if CFG.Aimlock and holdingRMB and (not CFG.AimbotRequireGun or hasGun()) then
-        local t = getBestTarget()
-        if t then
-            lockCamera()
-            cam.CFrame = CFrame.lookAt(cam.CFrame.Position, t.Position)
+    local t = getBestTarget()
+    if not t then
+        unlockCamera()
+        return
+    end
+
+    lockCamera()
+
+    if CFG.Aimlock then
+        cam.CFrame = CFrame.lookAt(cam.CFrame.Position, t.Position)
+    elseif CFG.Aimbot then
+        local goal = CFrame.lookAt(cam.CFrame.Position, t.Position)
+        if CFG.AimbotSmooth <= 0.05 then
+            cam.CFrame = goal
         else
-            -- holding RMB but no target: keep camera unlocked so mouse still works
-            if not CFG.Aimbot then
-                unlockCamera()
-            end
-        end
-    else
-        -- not holding / aimlock off
-        if not CFG.Aimbot then
-            unlockCamera()
-        elseif not getBestTarget() then
-            unlockCamera()
+            local s = math.clamp(CFG.AimbotSmooth, 0.05, 1.0)
+            local alpha = 1 - math.pow(1 - s, dt * 60)
+            cam.CFrame = cam.CFrame:Lerp(goal, alpha)
         end
     end
 end)
@@ -690,17 +770,6 @@ RunService.RenderStepped:Connect(function(dt)
         for _, pl in ipairs(Players:GetPlayers()) do
             if pl ~= lp then updateTag(pl) end
         end
-    end
-end)
-
--- ============================================================================
--- MENU TOGGLE
--- ============================================================================
-UserInputService.InputBegan:Connect(function(inp, gpe)
-    if gpe then return end
-    if inp.KeyCode == CFG.MenuKey then
-        CFG.Open = not CFG.Open
-        win.Visible = CFG.Open
     end
 end)
 
