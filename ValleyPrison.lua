@@ -21,7 +21,6 @@ local cam               = workspace.CurrentCamera
 local function chr(p)  return p and p.Character end
 local function root(p) local c = chr(p); return c and c:FindFirstChild("HumanoidRootPart") end
 local function hum(p)  local c = chr(p); return c and c:FindFirstChildOfClass("Humanoid") end
-local function head(p) local c = chr(p); return c and c:FindFirstChild("Head") end
 local function isAlive(p)
     local h = hum(p)
     return h and h.Health > 0 and h:GetState() ~= Enum.HumanoidStateType.Dead
@@ -49,17 +48,13 @@ end
 -- ============================================================================
 
 local CFG = {
-    -- aimbot
     Aimbot=false, AimbotFOV=150, AimbotSmooth=0.12, AimbotPart="Head",
     AimbotTeamCheck=false, AimbotRequireGun=false, AimbotWallCheck=false,
     AimbotFOVRing=false, AimbotFOVRingColor=Color3.fromRGB(0,201,185),
     Aimlock=false, SilentAim=false, Triggerbot=false, TriggerbotDelay=0.05,
-    -- weapon
     NoRecoil=false, NoSpread=false, RapidFire=false, InfiniteAmmo=false,
     AutoReload=false, InstantEquip=false,
-    -- hitbox
     HitboxExpand=false, HitboxSize=6,
-    -- esp
     PlayerESP=false, ESPFillColor=Color3.fromRGB(99,179,237),
     ESPOutlineColor=Color3.fromRGB(99,179,237),
     ESPFillTransparency=0.75, ESPOutlineTransparency=0,
@@ -69,26 +64,19 @@ local CFG = {
     TracerESP=false, TracerColor=Color3.fromRGB(248,113,113),
     TracerOrigin="Bottom", TracerThickness=1.5,
     TeamColors=true, ESPMaxDist=500, ChamsESP=false, ChamsColor=Color3.fromRGB(255,165,0),
-    -- item esp
     ItemESP=false, WeaponESP=false, KeycardESP=false, ItemESPMaxDist=150,
-    -- movement
     SpeedEnabled=false, Speed=24, Fly=false, FlySpeed=30, Noclip=false,
     InfJump=false, JumpPower=60, InfStamina=false, AntiGravity=false,
     GravityValue=50, BunnyHop=false, SlowFall=false, SlowFallSpeed=5,
     SuperJump=false, SuperJumpPower=200, TpToCursor=false,
-    -- buffs
     GodMode=false, AntiStun=false, InfHealth=false,
-    -- visuals
     Fullbright=false, NoFog=false, TimeOfDay=false, TimeValue=14,
     ThirdPerson=false, ThirdPersonDist=10, ZoomHack=false, ZoomFOV=70,
     Rainbow=false, InvisibleChar=false, CustomCharColor=false,
     CustomCharColor3=Color3.fromRGB(255,255,255),
     NoBloom=false, NoBlur=false,
-    -- prison
     BlockArrest=false, BlockBan=false, AutoEscape=false, RemoveCuffs=false,
-    -- anti
     AntiKick=true, AntiDisconnect=false, LogRemotes=false,
-    -- gui
     Open=true, Page="Home", MenuKey=Enum.KeyCode.RightShift,
     ShowNotify=true,
 }
@@ -221,7 +209,6 @@ win.Parent = gui
 local wcr = Instance.new("UICorner"); wcr.CornerRadius = UDim.new(0, 10); wcr.Parent = win
 local wst = Instance.new("UIStroke"); wst.Color = C.border; wst.Transparency = 0.88; wst.Thickness = 1; wst.Parent = win
 
--- title bar
 local titleBar = Instance.new("Frame")
 titleBar.Name = "titleBar"
 titleBar.Size = UDim2.new(1, 0, 0, TITLE_H)
@@ -277,7 +264,6 @@ end
 local btnClose = mkTitleBtn("×", C.danger, -28)
 local btnMin   = mkTitleBtn("–", C.ok, -52)
 
--- sidebar
 local sidebar = Instance.new("Frame")
 sidebar.Name = "sidebar"
 sidebar.Size = UDim2.new(0, SIDEBAR_W, 1, -TITLE_H)
@@ -638,6 +624,8 @@ local function mkDrop(parent, label, options, cfgKey, onChanged)
     return function(v) current = v; CFG[cfgKey] = v; btn.Text = "▾  " .. tostring(v) end
 end
 
+-- FIX 1: color picker panel now lives inside the row as a floating frame with ZIndex,
+-- so it doesn't push sibling rows in the card's UIListLayout.
 local function mkColorPicker(parent, label, cfgKey, onChanged)
     local row = Instance.new("Frame")
     row.BackgroundTransparency = 1
@@ -664,30 +652,23 @@ local function mkColorPicker(parent, label, cfgKey, onChanged)
     local scr = Instance.new("UICorner"); scr.CornerRadius = UDim.new(0, 4); scr.Parent = sw
     local sst = Instance.new("UIStroke"); sst.Color = C.border; sst.Transparency = 0.7; sst.Thickness = 1; sst.Parent = sw
 
-    local panel = Instance.new("Frame")
-    panel.Size = UDim2.new(1, 0, 0, 0)
-    panel.BackgroundColor3 = C.cardHov
-    panel.BorderSizePixel = 0
-    panel.Visible = false
-    panel.ClipsDescendants = true
-    panel.Parent = row
-    panel.Position = UDim2.new(0, 0, 1, 4)
-    local pcr = Instance.new("UICorner"); pcr.CornerRadius = UDim.new(0, 5); pcr.Parent = panel
-
-    -- The panel is parented inside a 30px row, so it overflows; use a sub-container
     local holder = Instance.new("Frame")
-    holder.BackgroundTransparency = 1
-    holder.Size = UDim2.new(1, 0, 0, 0)
+    holder.BackgroundColor3 = C.cardHov
+    holder.BorderSizePixel = 0
+    holder.Size = UDim2.new(1, -8, 0, 0)
+    holder.Position = UDim2.new(0, 4, 1, 4)
     holder.AutomaticSize = Enum.AutomaticSize.Y
     holder.Visible = false
-    holder.Parent = parent
+    holder.ZIndex = 20
+    holder.ClipsDescendants = true
+    holder.Parent = row
+    local hcr = Instance.new("UICorner"); hcr.CornerRadius = UDim.new(0, 5); hcr.Parent = holder
+    local hst = Instance.new("UIStroke"); hst.Color = C.border; hst.Transparency = 0.85; hst.Thickness = 1; hst.Parent = holder
     local hl = Instance.new("UIListLayout"); hl.Padding = UDim.new(0, 2); hl.Parent = holder
     local hpad = Instance.new("UIPadding")
     hpad.PaddingLeft = UDim.new(0, 8); hpad.PaddingRight = UDim.new(0, 8)
     hpad.PaddingTop = UDim.new(0, 4); hpad.PaddingBottom = UDim.new(0, 4)
     hpad.Parent = holder
-
-    panel:Destroy()  -- unused, using holder instead
 
     local vals = {
         R = math.floor((CFG[cfgKey] or Color3.fromRGB(255,255,255)).R * 255 + 0.5),
@@ -766,6 +747,7 @@ local function mkColorPicker(parent, label, cfgKey, onChanged)
     end)
 end
 
+-- FIX 2: st.Parent = st.Parent or btn  →  st.Parent = btn
 local function mkKeybind(parent, label, cfgKey)
     local row = Instance.new("Frame")
     row.BackgroundTransparency = 1
@@ -793,7 +775,7 @@ local function mkKeybind(parent, label, cfgKey)
     btn.AutoButtonColor = false
     btn.Parent = row
     local cr = Instance.new("UICorner"); cr.CornerRadius = UDim.new(0, 5); cr.Parent = btn
-    local st = Instance.new("UIStroke"); st.Color = C.border; st.Transparency = 0.92; st.Thickness = 1; st.Parent = st.Parent or btn
+    local st = Instance.new("UIStroke"); st.Color = C.border; st.Transparency = 0.92; st.Thickness = 1; st.Parent = btn
 
     local listening = false
     btn.MouseButton1Click:Connect(function()
@@ -817,6 +799,9 @@ local function mkKeybind(parent, label, cfgKey)
     end)
 end
 
+-- FIX 3: FPS read from a cached variable updated by the main RenderStepped loop
+-- instead of yielding the info-row thread every 0.5s.
+local _cachedFPS = 60
 local function mkInfoRow(parent, label, getter)
     local row = Instance.new("Frame")
     row.BackgroundTransparency = 1
@@ -985,8 +970,6 @@ local function setPage(name)
         })
         local ind = btn:FindFirstChild("_ind")
         if ind then tw(ind, 0.1, { BackgroundTransparency = active and 0 or 1 }) end
-        local lbl = btn:FindFirstChildOfClass("TextLabel")
-        local icon = btn:FindFirstChild("TextLabel", true)
         for _, ch in ipairs(btn:GetChildren()) do
             if ch:IsA("TextLabel") and ch.Text ~= PAGE_ICONS[n] then
                 ch.TextColor3 = active and C.text or C.textDim
@@ -1038,10 +1021,7 @@ do
         local h = hum(lp); return h and (math.floor(h.Health).."/"..math.floor(h.MaxHealth)) or "—"
     end)
     mkInfoRow(c2, "Ping", function() return math.floor(lp:GetNetworkPing() * 1000) .. "ms" end)
-    mkInfoRow(c2, "FPS", function()
-        local t0 = tick(); RunService.RenderStepped:Wait()
-        return math.floor(1 / math.max(tick() - t0, 0.001))
-    end)
+    mkInfoRow(c2, "FPS", function() return _cachedFPS end)
     mkInfoRow(c2, "Active Cheats", function()
         local n = 0
         for k, v in pairs(CFG) do
@@ -1279,10 +1259,21 @@ do
     }
     for _, locName in ipairs(LOCATIONS) do
         mkBtn(c1, locName, function()
+            -- FIX 5: exact-name match first, then substring fallback with longest-name priority.
             local target
             for _, d in ipairs(workspace:GetDescendants()) do
-                if d:IsA("BasePart") and d.Name:lower():find(locName:lower(), 1, true) then
-                    target = d; break
+                if d:IsA("BasePart") and d.Name == locName then target = d; break end
+            end
+            if not target then
+                local bestLen = 0
+                for _, d in ipairs(workspace:GetDescendants()) do
+                    if d:IsA("BasePart") then
+                        local nl = d.Name:lower()
+                        local ql = locName:lower()
+                        if nl:find(ql, 1, true) and #nl > bestLen then
+                            target = d; bestLen = #nl
+                        end
+                    end
                 end
             end
             local r = root(lp)
@@ -1308,7 +1299,6 @@ do
                     local t, m = root(pl), root(lp)
                     if t and m then m.CFrame = t.CFrame + Vector3.new(2, 0, 0); notify("TP → "..pl.Name, "ok") end
                 end, "→ TP")
-                -- second button appended manually
                 local b = Instance.new("TextButton")
                 b.Size = UDim2.new(0, 50, 0, 18)
                 b.Position = UDim2.new(1, -110, 0.5, -9)
@@ -1324,7 +1314,6 @@ do
                 b.MouseButton1Click:Connect(function()
                     local t, m = root(pl), root(lp)
                     if t and m then
-                        -- client-side attempt; server may reject
                         pcall(function() t.CFrame = m.CFrame + Vector3.new(2, 0, 0) end)
                         notify("Bring → "..pl.Name, "info")
                     end
@@ -1350,7 +1339,6 @@ do
                 local r = root(lp)
                 if r then r.CFrame = sp.cf; notify("TP → "..sp.name, "ok") end
             end, "Go")
-            -- delete button
             local rows = sf:GetChildren()
             local lastRow = rows[#rows]
             if lastRow and lastRow:IsA("Frame") then
@@ -1598,19 +1586,16 @@ do
                 local ping = math.floor(pl:GetNetworkPing() * 1000)
                 addRow(pl.Name .. "  ·  " .. ping .. "ms  ·  " .. (pl.Team and pl.Team.Name or "—"),
                     function()
-                        local r = root(pl)
-                        if r then
-                            local ch = chr(pl)
-                            if ch then
-                                local hl = Instance.new("Highlight")
-                                hl.Adornee = ch
-                                hl.FillColor = C.accent2
-                                hl.OutlineColor = C.accent2
-                                hl.Parent = ch
-                                task.delay(3, function() hl:Destroy() end)
-                            end
+                        local ch = chr(pl)
+                        if ch then
+                            local hl = Instance.new("Highlight")
+                            hl.Adornee = ch
+                            hl.FillColor = C.accent2
+                            hl.OutlineColor = C.accent2
+                            hl.Parent = ch
+                            task.delay(3, function() hl:Destroy() end)
                         end
-                    end, "ESP")
+                    end, "Flash")
             end
         end
     end
@@ -1677,7 +1662,7 @@ end
 setPage("Home")
 
 -- ============================================================================
--- SECTION 17 — ANTI-KICK / REMOTE HOOKS (runs unconditionally at load)
+-- SECTION 17 — ANTI-KICK / REMOTE HOOKS
 -- ============================================================================
 
 pcall(function()
@@ -1824,7 +1809,6 @@ RunService:BindToRenderStep("VP_Aim", Enum.RenderPriority.Camera.Value + 1, func
     end
 end)
 
--- FOV ring (Drawing API)
 local fovRing
 if Drawing then
     pcall(function()
@@ -1995,7 +1979,6 @@ local function updateHighlight(pl)
     hl.DepthMode = CFG.WallHack and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
 end
 
--- Drawing pool
 local function ensureDrawPool(pl)
     if drawPool[pl] then return drawPool[pl] end
     if not Drawing then return nil end
@@ -2043,7 +2026,6 @@ local function updateDrawingESP()
             if pool then
                 local ch = chr(pl)
                 local inRange = dist(pl) <= CFG.ESPMaxDist
-                -- skeleton
                 for i, pair in ipairs(BONES) do
                     local l = pool.bones[i]
                     if l then
@@ -2061,7 +2043,6 @@ local function updateDrawingESP()
                         else l.Visible = false end
                     end
                 end
-                -- box
                 if CFG.BoxESP and inRange and ch then
                     local minX, minY = math.huge, math.huge
                     local maxX, maxY = -math.huge, -math.huge
@@ -2099,7 +2080,6 @@ local function updateDrawingESP()
                 else
                     for _, l in ipairs(pool.box) do l.Visible = false end
                 end
-                -- tracer
                 if CFG.TracerESP and inRange then
                     local hrp = root(pl)
                     if hrp then
@@ -2243,7 +2223,6 @@ end
 -- SECTION 22 — MAIN LOOPS
 -- ============================================================================
 
--- Noclip via Stepped (outpaces game re-enabling CanCollide)
 RunService.Stepped:Connect(function()
     if not CFG.Noclip then return end
     local ch = chr(lp); if not ch then return end
@@ -2252,7 +2231,6 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- Hitbox expansion
 local origSizes = {}
 RunService.Heartbeat:Connect(function()
     for _, pl in ipairs(Players:GetPlayers()) do
@@ -2275,7 +2253,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Speed / jump / stamina / god / bunnyhop / gravity / slowfall / rainbow
 local _lastStamScan = 0
 local _stamCache
 RunService.Heartbeat:Connect(function()
@@ -2336,16 +2313,13 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Inf jump
 UserInputService.JumpRequest:Connect(function()
     if not CFG.InfJump then return end
     local h = hum(lp)
     if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
 end)
 
--- TP to cursor (hold T)
 local _tpHeld = false
-local _tpMouse
 UserInputService.InputBegan:Connect(function(inp, gpe)
     if not CFG.TpToCursor then return end
     if inp.KeyCode == Enum.KeyCode.T then _tpHeld = true end
@@ -2369,7 +2343,6 @@ UserInputService.InputEnded:Connect(function(inp)
     end
 end)
 
--- Triggerbot
 local _lastTrig = 0
 RunService.Heartbeat:Connect(function()
     if not CFG.Triggerbot then return end
@@ -2403,10 +2376,16 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Throttled visual update loop
-local timers = { esp = 0, tags = 0, draw = 0 }
+-- throttled visual update loop, also drives the cached FPS
+local timers = { esp = 0, tags = 0, draw = 0, fps = 0, frames = 0 }
 RunService.RenderStepped:Connect(function(dt)
     timers.esp += dt; timers.tags += dt; timers.draw += dt
+    timers.fps += dt; timers.frames += 1
+
+    if timers.fps >= 1 then
+        _cachedFPS = math.floor(timers.frames / timers.fps + 0.5)
+        timers.fps = 0; timers.frames = 0
+    end
     if timers.esp >= 0.18 then
         timers.esp = 0
         for _, pl in ipairs(Players:GetPlayers()) do
@@ -2425,7 +2404,6 @@ RunService.RenderStepped:Connect(function(dt)
     end
 end)
 
--- Character lifecycle
 lp.CharacterAdded:Connect(function()
     task.wait(0.5)
     if CFG.Fly then _G._startFly() end
@@ -2441,7 +2419,6 @@ end)
 local minimized = false
 UserInputService.InputBegan:Connect(function(inp, gpe)
     if inp.KeyCode ~= CFG.MenuKey then return end
-    -- intentionally no gameProcessed guard so it fires with text focus
     CFG.Open = not CFG.Open
     if CFG.Open then
         win.Visible = true
@@ -2475,7 +2452,6 @@ btnMin.MouseButton1Click:Connect(function()
     end
 end)
 
--- title bar drag
 do
     local dragging, dragStart, startPos = false, nil, nil
     titleBar.InputBegan:Connect(function(inp)
