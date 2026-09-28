@@ -1,6 +1,6 @@
--- language: Lua (Luau), file: rivals_aim_esp_binds.lua
--- target: JJSploit / low-tier executors. No Drawing.
--- aimbot + aimlock + esp + distance + sliders + wallcheck + keybinds.
+-- language: Lua (Luau), file: rivals_complete.lua
+-- target: JJSploit / low-tier executors. No Drawing. No keys held.
+-- aimbot + aimlock + esp + distance + sliders + wallcheck + keybind toggles
 
 local Players          = game:GetService("Players")
 local RunService       = game:GetService("RunService")
@@ -11,22 +11,44 @@ local cam              = workspace.CurrentCamera
 local function chr(p) return p and p.Character end
 local function root(p) local c = chr(p); return c and c:FindFirstChild("HumanoidRootPart") end
 local function hum(p)  local c = chr(p); return c and c:FindFirstChildOfClass("Humanoid") end
+
+-- rejects corpses, Health<=0, Dead/Dying, ragdolls, out-of-workspace chars
 local function isAlive(p)
-    local h = hum(p)
-    return h and h.Health > 0 and h:GetState() ~= Enum.HumanoidStateType.Dead
+    if not p then return false end
+    local ch = p.Character
+    if not ch or ch.Parent ~= workspace then return false end
+    local h = ch:FindFirstChildOfClass("Humanoid")
+    if not h then return false end
+    if h.Health <= 0 then return false end
+    local st = h:GetState()
+    if st == Enum.HumanoidStateType.Dead then return false end
+    if st == Enum.HumanoidStateType.Dying then return false end
+    if not ch:FindFirstChild("Head") then return false end
+    if not ch:FindFirstChild("HumanoidRootPart") then return false end
+    if ch:FindFirstChild("Ragdoll") then return false end
+    if ch:GetAttribute("Dead") == true then return false end
+    if ch:GetAttribute("IsDead") == true then return false end
+    if ch:GetAttribute("Alive") == false then return false end
+    return true
 end
+
 local function dist(p)
     local a, b = root(lp), root(p)
     if not a or not b then return math.huge end
     return (a.Position - b.Position).Magnitude
 end
+
 local function hasGun()
     local ch = chr(lp)
     if not ch then return false end
     return ch:FindFirstChildOfClass("Tool") ~= nil
 end
 
+-- ============================================================================
+-- CONFIG
+-- ============================================================================
 local CFG = {
+    -- aim
     Aimbot = false,
     Aimlock = false,
     AimbotFOV = 300,
@@ -38,6 +60,7 @@ local CFG = {
     AimbotMaxDist = 800,
     AimbotFOVRing = true,
     AimbotFOVRingColor = Color3.fromRGB(0, 255, 170),
+    -- esp
     PlayerESP = false,
     TeamColors = true,
     ESPFillColor = Color3.fromRGB(99, 179, 237),
@@ -46,6 +69,7 @@ local CFG = {
     ESPOutlineTransparency = 0,
     ESPMaxDist = 800,
     DistanceESP = false,
+    -- menu
     Open = true,
     MenuKey = Enum.KeyCode.Insert,
     -- keybinds (nil = unbound)
@@ -83,7 +107,7 @@ end
 local gui = Instance.new("ScreenGui")
 gui.Name = "RIV_Main"
 gui.ResetOnSpawn = false
-gui.IgnoreGuiInset = true
+gui.IgnoreGuiInset = false      -- important: aligns gui coords to playable viewport
 gui.DisplayOrder = 1000
 gui.Parent = lp:WaitForChild("PlayerGui")
 
@@ -160,6 +184,9 @@ local cpad = Instance.new("UIPadding", content)
 cpad.PaddingTop = UDim.new(0, 8)
 cpad.PaddingBottom = UDim.new(0, 8)
 
+-- ============================================================================
+-- COMPONENTS
+-- ============================================================================
 local function secLabel(parent, text)
     local f = Instance.new("Frame", parent)
     f.BackgroundTransparency = 1
@@ -383,18 +410,13 @@ local function mkDrop(parent, label, options, cfgKey)
     end)
 end
 
--- ────────────────────────────────────────────────────────────────────────────
--- KEYBIND ROW — click button, press a key, it binds. Right-click to clear.
--- ────────────────────────────────────────────────────────────────────────────
-local capturingBind = nil  -- which CFG key we're capturing for
-local bindButtons = {}     -- cfgKey -> button label to update
+-- keybind row
+local capturingBind = nil
+local bindButtons = {}
 
 local function prettyKey(keyCode)
     if not keyCode then return "None" end
-    local name = keyCode.Name
-    -- strip common prefixes for readability
-    name = name:gsub("KeyCode%.", "")
-    return name
+    return keyCode.Name:gsub("KeyCode%.", "")
 end
 
 local function mkKeybind(parent, label, cfgKey)
@@ -478,12 +500,10 @@ mkSlider(c2, "Fill Transparency", "ESPFillTransparency", 0, 1, 0.05)
 mkKeybind(c2, "ESP Toggle Bind", "BindESP")
 
 -- ============================================================================
--- KEYBIND CAPTURE + FIRE
+-- INPUT — binds + menu toggle
 -- ============================================================================
--- Capture mode: next key pressed becomes the bind.
--- Fire mode: when a bound key is pressed, toggle its feature.
 UserInputService.InputBegan:Connect(function(inp, gpe)
-    -- if we're capturing a bind, this key becomes the bind — regardless of gpe
+    -- capture mode
     if capturingBind then
         if inp.UserInputType == Enum.UserInputType.Keyboard
            and inp.KeyCode ~= Enum.KeyCode.Unknown then
@@ -502,7 +522,7 @@ UserInputService.InputBegan:Connect(function(inp, gpe)
     if gpe then return end
     if inp.UserInputType ~= Enum.UserInputType.Keyboard then return end
 
-    -- menu toggle always
+    -- menu toggle
     if inp.KeyCode == CFG.MenuKey then
         CFG.Open = not CFG.Open
         win.Visible = CFG.Open
@@ -521,49 +541,51 @@ end)
 -- ============================================================================
 -- TARGET SELECTION
 -- ============================================================================
--- language: Lua (Luau), drop-in replacement for getBestTarget
--- put this in place of the existing function
--- also add: CFG.AimbotDebug = true  at the top of your CFG table for console output
-
 local function getBestTarget()
     local vp = cam.ViewportSize
     local cx, cy = vp.X / 2, vp.Y / 2
     local bestPart, bestScore = nil, math.huge
-    local candidatesSeen = 0
 
     for _, pl in ipairs(Players:GetPlayers()) do
-        if pl ~= lp then
-            local alive = isAlive(pl)
-            if alive then
-                local skip = false
-                if CFG.AimbotTeamCheck and isTeammate(pl) then skip = true end
-                if dist(pl) > CFG.AimbotMaxDist then skip = true end
-                if CFG.AimbotRequireGun and not hasGun() then skip = true end
-                if not skip then
-                    local ch = chr(pl)
-                    local pt = ch and (ch:FindFirstChild(CFG.AimbotPart) or root(pl))
-                    if pt then
-                        local blocked = false
-                        if CFG.AimbotWallCheck then
-                            local me = root(lp)
-                            if me then
-                                local params = RaycastParams.new()
-                                params.FilterType = Enum.RaycastFilterType.Exclude
-                                params.FilterDescendantsInstances = {ch, chr(lp)}
-                                local res = workspace:Raycast(me.Position, pt.Position - me.Position, params)
-                                if res then blocked = true end
-                            end
-                        end
-                        if not blocked then
-                            local sp, onScreen = cam:WorldToViewportPoint(pt.Position)
-                            -- REMOVED: sp.Z > 0 filter (was rejecting valid targets on some executors)
-                            if onScreen then
-                                local sd = math.sqrt((sp.X - cx)^2 + (sp.Y - cy)^2)
-                                candidatesSeen = candidatesSeen + 1
-                                if sd <= CFG.AimbotFOV and sd < bestScore then
-                                    bestScore = sd
-                                    bestPart = pt
-                                end
+        if pl ~= lp and isAlive(pl) then
+            local skip = false
+            if CFG.AimbotTeamCheck and isTeammate(pl) then skip = true end
+            if dist(pl) > CFG.AimbotMaxDist then skip = true end
+            if CFG.AimbotRequireGun and not hasGun() then skip = true end
+
+            if not skip then
+                local ch = chr(pl)
+
+                local blocked = false
+                if CFG.AimbotWallCheck then
+                    local me = root(lp)
+                    local hrp = ch:FindFirstChild("HumanoidRootPart")
+                    if me and hrp then
+                        local params = RaycastParams.new()
+                        params.FilterType = Enum.RaycastFilterType.Exclude
+                        params.FilterDescendantsInstances = {ch, chr(lp)}
+                        local res = workspace:Raycast(me.Position, hrp.Position - me.Position, params)
+                        if res then blocked = true end
+                    end
+                end
+
+                if not blocked then
+                    -- fallback chain: configured part -> Head -> UpperTorso -> Torso -> HRP
+                    local tryParts = {
+                        ch:FindFirstChild(CFG.AimbotPart),
+                        ch:FindFirstChild("Head"),
+                        ch:FindFirstChild("UpperTorso"),
+                        ch:FindFirstChild("Torso"),
+                        ch:FindFirstChild("HumanoidRootPart"),
+                    }
+                    for _, pt in ipairs(tryParts) do
+                        if pt and pt:IsA("BasePart") then
+                            local sp = cam:WorldToViewportPoint(pt.Position)
+                            local sd = math.sqrt((sp.X - cx)^2 + (sp.Y - cy)^2)
+                            if sd <= CFG.AimbotFOV and sd < bestScore then
+                                bestScore = sd
+                                bestPart = pt
+                                break
                             end
                         end
                     end
@@ -571,21 +593,12 @@ local function getBestTarget()
             end
         end
     end
-
-    if CFG.AimbotDebug then
-        print(string.format(
-            "[RIV] aim check  players=%d  onscreen=%d  fov=%d  best=%s",
-            #Players:GetPlayers(),
-            candidatesSeen,
-            CFG.AimbotFOV,
-            bestPart and bestPart:GetFullName() or "NONE"
-        ))
-    end
-
     return bestPart
 end
 
--- FOV ring
+-- ============================================================================
+-- FOV RING
+-- ============================================================================
 local fovCircle = Instance.new("Frame", gui)
 fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 fovCircle.BackgroundTransparency = 1
@@ -599,7 +612,7 @@ fovStroke.Transparency = 0.25
 Instance.new("UICorner", fovCircle).CornerRadius = UDim.new(1, 0)
 
 -- ============================================================================
--- AIM LOOP — no keys, always-on toggles
+-- AIM LOOP — no keys, always-on when enabled
 -- ============================================================================
 local camLock = false
 local function lockCamera()
@@ -614,17 +627,18 @@ local function unlockCamera()
 end
 
 RunService.RenderStepped:Connect(function(dt)
-    local ringOn = CFG.AimbotFOVRing and (CFG.Aimbot or CFG.Aimlock)
-    fovCircle.Visible = ringOn
-    if ringOn then
+    -- ring only visible when aim is actually active
+    local aimActive = CFG.Aimbot or CFG.Aimlock
+    fovCircle.Visible = CFG.AimbotFOVRing and aimActive
+    if fovCircle.Visible then
         local vp = cam.ViewportSize
+        -- IgnoreGuiInset = false, so gui coords match ViewportSize — direct center
         fovCircle.Position = UDim2.fromOffset(vp.X / 2, vp.Y / 2)
         fovCircle.Size = UDim2.fromOffset(CFG.AimbotFOV * 2, CFG.AimbotFOV * 2)
         fovStroke.Color = CFG.AimbotFOVRingColor
     end
 
-    local active = CFG.Aimbot or CFG.Aimlock
-    if not active then
+    if not aimActive then
         unlockCamera()
         return
     end
@@ -795,6 +809,9 @@ RunService.RenderStepped:Connect(function(dt)
     end
 end)
 
+-- ============================================================================
+-- CLOSE
+-- ============================================================================
 btnClose.MouseButton1Click:Connect(function()
     CFG.Open = false
     win.Visible = false
