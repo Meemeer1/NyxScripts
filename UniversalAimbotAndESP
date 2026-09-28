@@ -844,20 +844,11 @@ Instance.new("UICorner", fovCircle).CornerRadius = UDim.new(1, 0)
 -- ============================================================================
 -- AIM LOOP — BindToRenderStep at Camera+1 to beat game's camera
 -- ============================================================================
-local camLock = false
-local function lockCamera()
-    if camLock then return end
-    cam.CameraType = Enum.CameraType.Scriptable
-    camLock = true
-end
-local function unlockCamera()
-    if not camLock then return end
-    cam.CameraType = Enum.CameraType.Custom
-    camLock = false
-end
+-- language: Lua (Luau), drop-in replacement for the aim loop
+-- camera stays Custom, mouse stays free, CFrame write wins every frame
 
 RunService:UnbindFromRenderStep("RIV_AimLoop")
-RunService:BindToRenderStep("RIV_AimLoop", Enum.RenderPriority.Camera.Value + 1, function(dt)
+RunService:BindToRenderStep("RIV_AimLoop", Enum.RenderPriority.Camera.Value + 100, function(dt)
     local aimActive = CFG.Aimbot or CFG.Aimlock
     fovCircle.Visible = CFG.FOVRing and aimActive
     if fovCircle.Visible then
@@ -867,18 +858,10 @@ RunService:BindToRenderStep("RIV_AimLoop", Enum.RenderPriority.Camera.Value + 1,
         fovStroke.Color = CFG.FOVRingColor
     end
 
-    if not aimActive then
-        unlockCamera()
-        return
-    end
+    if not aimActive then return end
 
     local t = getBestTarget()
-    if not t then
-        unlockCamera()
-        return
-    end
-
-    lockCamera()
+    if not t then return end
 
     if CFG.Aimlock then
         cam.CFrame = CFrame.lookAt(cam.CFrame.Position, t.Position)
